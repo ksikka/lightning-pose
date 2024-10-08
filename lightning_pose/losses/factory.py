@@ -29,21 +29,18 @@ class LossFactory(pl.LightningModule):
         self.data_module = data_module
 
         # initialize loss classes
-        assert str(self.device) == 'cpu', self.device
         self._initialize_loss_instances()
 
-    def recompute_pca(self):
-        assert str(self.device) not in ('cpu','cuda'), self.device
+    def setup(self):
         for loss_name, loss_instance in self.loss_instance_dict.items():
             loss_instance.to(self.device)
-            loss_instance.recompute_pca()
+            loss_instance.setup()
         pass
 
     def _initialize_loss_instances(self):
         self.loss_instance_dict = {}
         loss_classes_dict = get_loss_classes()
         for loss, params in self.losses_params_dict.items():
-            assert 'device' not in self.losses_params_dict
             self.loss_instance_dict[loss] = loss_classes_dict[loss](
                 data_module=self.data_module, **params
             )

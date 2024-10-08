@@ -50,12 +50,12 @@ training:
   # dlc-top-down- dlc augmentations plus vertical and horizontal flips
   imgaug: dlc
   # batch size of labeled data during training
-  train_batch_size: 32
+  train_batch_size: 16
   # batch size of labeled data during validation
   val_batch_size: 16
   # batch size of labeled data during test
   # TODO: this is actually used interchangeably with sequence length in prediction. not amazing.
-  test_batch_size: 16
+  test_batch_size: 32
   # fraction of labeled data used for training
   train_prob: 0.8
   # fraction of labeled data used for validation (remaining used for test)

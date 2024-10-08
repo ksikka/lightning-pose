@@ -301,6 +301,7 @@ class DataExtractor(object):
     ]:
         keypoints_list = []
         images_list = []
+        assert isinstance(loader.sampler, torch.utils.data.sampler.SequentialSampler), loader.sampler
         for ind, batch in enumerate(loader):
             keypoints_list.append(batch["keypoints"])
             if self.extract_images:
