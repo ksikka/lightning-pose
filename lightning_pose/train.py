@@ -130,7 +130,6 @@ def train(cfg: DictConfig) -> None:
             callbacks=callbacks,
             logger=logger,
             limit_train_batches=limit_train_batches,
-            accumulate_grad_batches=cfg.training.get("accumulate_grad_batches", 1),
             profiler=cfg.training.get("profiler", None),
         )
     

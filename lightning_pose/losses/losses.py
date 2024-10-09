@@ -81,6 +81,9 @@ class Loss(pl.LightningModule):
 
         self.reduce_methods_dict = {"mean": torch.mean, "sum": torch.sum}
 
+    def recompute_pca(self):
+        pass
+
     @property
     def weight(self) -> TensorType[()]:
         # weight = \sigma where our trainable parameter is \log(\sigma^2).
@@ -297,6 +300,10 @@ class PCALoss(Loss):
         # initialize keypoint pca module
         # this module will fit pca on training data, and will define the error metric
         # and fuction to be used in model training.
+        # self.device has defaulted to cpu by LightningModule since the trainer has not yet adjusted it.
+        assert str(self.device) == 'cpu', self.device
+        # device kwarg is coming from the default value of _TORCH_DEVICE, and is passed to KeypointPCA.
+        assert str(device) == 'cuda', device
         self.pca = KeypointPCA(
             loss_type=self.loss_name,
             data_module=data_module,
@@ -328,6 +335,13 @@ class PCALoss(Loss):
                     self.loss_name,
                 )
             )
+
+    def recompute_pca(self):
+        # it should have been setup by trainer now. 
+        assert str(self.device) not in ('cpu', 'cuda'), self.device
+        self.pca.device = self.device
+        self.pca.data_arr.to(self.device)
+        self.pca()
 
     def remove_nans(self, **kwargs):
         # find nans in the targets, and do a masked_select operation

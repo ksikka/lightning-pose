@@ -63,6 +63,11 @@ class KeypointPCA(object):
         self.columns_for_singleview_pca = columns_for_singleview_pca
         self.pca_object = None
         self.device = device
+        self._get_data()
+        # modify self.data_arr in the case of multiview pca, else keep the same
+        self.data_arr = self._format_data(data_arr=self.data_arr)
+        # has the default initialized device from kwaarg.
+        assert str(self.device) == 'cuda', self.device
 
     def _get_data(self) -> None:
         self.data_arr, _ = DataExtractor(
@@ -216,12 +221,6 @@ class KeypointPCA(object):
         return reprojection_loss
 
     def __call__(self) -> None:
-
-        # save training data in self.data_arr
-        self._get_data()
-
-        # modify self.data_arr in the case of multiview pca, else keep the same
-        self.data_arr = self._format_data(data_arr=self.data_arr)
 
         # check that we have more observations than observation-dimensions
         self._check_data()

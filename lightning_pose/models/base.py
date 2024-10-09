@@ -520,6 +520,8 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
 @typechecked
 class SemiSupervisedTrackerMixin(object):
     """Mixin class providing training step function for semi-supervised models."""
+    def on_fit_start(self):
+        self.loss_factory_unsup.recompute_pca()
 
     def get_loss_inputs_unlabeled(self, batch_dict: UnlabeledBatchDict) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
@@ -537,7 +539,7 @@ class SemiSupervisedTrackerMixin(object):
         data_dict = self.get_loss_inputs_unlabeled(batch_dict=batch_dict)
 
         # compute loss on unlabeled data
-        loss, log_list = self.loss_factory_unsup(
+        loss, log_list = self.loss_factory_unsup.to(self.device)(
             stage=stage,
             anneal_weight=anneal_weight,
             **data_dict,
