@@ -95,7 +95,7 @@ def train(cfg: DictConfig) -> None:
     # set up trainer
     trainer = pl.Trainer(  # TODO: be careful with devices when scaling to multiple gpus
         accelerator="gpu",  # TODO: control from outside
-        devices=2,  # TODO: control from outside
+        devices=max(cfg.training.num_gpus, 1),  # TODO: control from outside
         max_epochs=cfg.training.max_epochs,
         min_epochs=cfg.training.min_epochs,
         check_val_every_n_epoch=min(

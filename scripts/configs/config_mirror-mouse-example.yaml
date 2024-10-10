@@ -55,7 +55,7 @@ training:
   val_batch_size: 16
   # batch size of labeled data during test
   # TODO: this is actually used interchangeably with sequence length in prediction. not amazing.
-  test_batch_size: 32
+  test_batch_size: 16
   # fraction of labeled data used for training
   train_prob: 0.8
   # fraction of labeled data used for validation (remaining used for test)
@@ -102,7 +102,7 @@ model:
   # - "unimodal_mse"
   # - "unimodal_kl"
   # - null: if null, assume a model is supervised.
-  losses_to_use: ['pca_singleview']
+  losses_to_use: null
   # backbone network
   backbone: resnet50_animal_ap10k
   # prediction mode: regression | heatmap | heatmap_mhcrnn (context)

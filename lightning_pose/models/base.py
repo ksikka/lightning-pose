@@ -521,8 +521,8 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
 class SemiSupervisedTrackerMixin(object):
     """Mixin class providing training step function for semi-supervised models."""
     def setup(self, stage):
-        if self.loss_factory_unsup is not None:
-            self.loss_factory_unsup.setup()
+        self.loss_factory_unsup.to(self.device)
+        self.loss_factory_unsup.setup()
 
     def get_loss_inputs_unlabeled(self, batch_dict: UnlabeledBatchDict) -> dict:
         """Return predicted heatmaps and their softmaxes (estimated keypoints)."""
