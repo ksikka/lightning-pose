@@ -35,7 +35,6 @@ class LossFactory(pl.LightningModule):
         for loss_name, loss_instance in self.loss_instance_dict.items():
             loss_instance.to(self.device)
             loss_instance.setup()
-        pass
 
     def _initialize_loss_instances(self):
         self.loss_instance_dict = {}

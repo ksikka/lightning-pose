@@ -450,12 +450,17 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
 
         if stage:
             # log overall supervised loss
-            self.log(f"{stage}_supervised_loss", loss, prog_bar=True)
+            self.log(f"{stage}_supervised_loss", loss, prog_bar=True, sync_dist=True)
             # log supervised pixel_error
-            self.log(f"{stage}_supervised_rmse", loss_rmse)
+            self.log(f"{stage}_supervised_rmse", loss_rmse, sync_dist=True)
             # log individual supervised losses
             for log_dict in log_list:
-                self.log(**log_dict)
+                #self.log(**log_dict, sync_dist=True)
+                self.log(
+                    log_dict['name'],
+                    log_dict['value'].to(self.device),
+                    prog_bar=log_dict.get('prog_bar', False),
+                    sync_dist=True)
 
         return loss
 
@@ -521,6 +526,7 @@ class BaseSupervisedTracker(BaseFeatureExtractor):
 class SemiSupervisedTrackerMixin(object):
     """Mixin class providing training step function for semi-supervised models."""
     def setup(self, stage):
+        super().setup(stage)
         self.loss_factory_unsup.to(self.device)
         self.loss_factory_unsup.setup()
 
