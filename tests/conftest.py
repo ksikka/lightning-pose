@@ -557,6 +557,7 @@ def remove_logs() -> Callable:
     return _remove_logs
 
 
+
 @pytest.fixture
 def run_model_test() -> Callable:
 
