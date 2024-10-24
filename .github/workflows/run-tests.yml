@@ -11,8 +11,8 @@ on:
   # We will not allow merging PRs that fail CI.
   # merge_group:
   #   types: [checks_requested]
-   pull_request:
-     types: [opened, reopened]
+  pull_request:
+    types: [opened, reopened]
 jobs:
   build-linux:
     # Ships with python 3.10. Using it saves time installing it.
