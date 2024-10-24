@@ -12,15 +12,10 @@ on:
     types: [checks_requested]
 jobs:
   build-linux:
-    runs-on: ubuntu-latest
+    # Ships with python 3.10. Using it saves time installing it.
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - name: Add conda to system path
-        run: >
-          # $CONDA is an environment variable pointing to the root of the miniconda
-          directory
-
-          echo $CONDA/bin >> $GITHUB_PATH
       - name: Install dependencies
         run: |
           pip install -e ".[dev]"
