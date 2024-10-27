@@ -1,6 +1,7 @@
 """Path handling functions."""
 
 import os
+from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
 import pandas as pd
@@ -22,7 +23,7 @@ __all__ = [
 
 @typechecked
 def ckpt_path_from_base_path(
-    base_path: str,
+    base_path: str | Path,
     model_name: str,
     logging_dir_name: str = "tb_logs/",
     version: int = 0,

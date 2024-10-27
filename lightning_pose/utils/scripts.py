@@ -1,6 +1,7 @@
 """Helper functions to build pipeline components from config dictionary."""
 
 import os
+from pathlib import Path
 from collections import OrderedDict
 from typing import Dict, List, Optional, Union
 
@@ -81,7 +82,7 @@ def get_imgaug_transform(cfg: DictConfig) -> iaa.Sequential:
 @typechecked
 def get_dataset(
     cfg: DictConfig,
-    data_dir: str,
+    data_dir: str | Path,
     imgaug_transform: iaa.Sequential,
 ) -> Union[BaseTrackingDataset, HeatmapDataset, MultiviewHeatmapDataset]:
     """Create a dataset that contains labeled data."""

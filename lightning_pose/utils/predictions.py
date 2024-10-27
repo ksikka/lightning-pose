@@ -3,6 +3,7 @@
 import datetime
 import gc
 import os
+from pathlib import Path
 import time
 from typing import Dict, List, Optional, Tuple, Type, Union
 
@@ -303,7 +304,7 @@ class PredictionHandler:
 def predict_dataset(
     cfg: DictConfig,
     data_module: BaseDataModule,
-    preds_file: str,
+    preds_file: str | Path,
     ckpt_file: Optional[str] = None,
     trainer: Optional[pl.Trainer] = None,
     model: Optional[ALLOWED_MODELS] = None,
