@@ -1,8 +1,10 @@
 import argparse
+from pathlib import Path
 
 from omegaconf import OmegaConf
-from pathlib import Path
+
 from lightning_pose.utils import pretty_print_str
+
 
 def main():
     r"""
@@ -15,11 +17,17 @@ def main():
         --predictions_file outputs/ood_preds/test_out.csv
     """
 
-    parser = argparse.ArgumentParser(description="Predict new frames using a trained model.")
-    parser.add_argument("--model_dir", required=True, type=Path, help="Model directory.")
+    parser = argparse.ArgumentParser(
+        description="Predict new frames using a trained model."
+    )
+    parser.add_argument(
+        "--model_dir", required=True, type=Path, help="Model directory."
+    )
     parser.add_argument("--data_dir", type=Path, required=True, help="Data directory.")
     parser.add_argument("--labels_file", type=Path, required=True, help="Label file.")
-    parser.add_argument("--predictions_file", type=Path, required=True, help="Output file.")
+    parser.add_argument(
+        "--predictions_file", type=Path, required=True, help="Output file."
+    )
     args = parser.parse_args()
 
     # Access the arguments
@@ -40,26 +48,17 @@ def main():
     cfg.model.losses_to_use = []
 
     import lightning.pytorch as pl
-    
-    from lightning_pose.utils.io import (
-        ckpt_path_from_base_path,
-    )
+
+    from lightning_pose.utils.io import ckpt_path_from_base_path
     from lightning_pose.utils.predictions import load_model_from_checkpoint, predict_dataset
-    from lightning_pose.utils.scripts import (
-        get_data_module,
-        get_dataset,
-        get_imgaug_transform,
-    )
+    from lightning_pose.utils.scripts import get_data_module, get_dataset, get_imgaug_transform
 
     # TODO Combine this into one function to get model from a directory.
     ckpt_file = ckpt_path_from_base_path(
         base_path=model_dir, model_name=cfg.model.model_name
     )
     model = load_model_from_checkpoint(
-        cfg=cfg,
-        ckpt_file=ckpt_file,
-        eval=True,
-        skip_data_module=True
+        cfg=cfg, ckpt_file=ckpt_file, eval=True, skip_data_module=True
     )
 
     pretty_print_str("Predicting images...")
@@ -67,7 +66,7 @@ def main():
     # TODO Make imgaug optional. if it's not passed, it should be default.
     imgaug_transform = get_imgaug_transform(cfg=cfg)
     dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
-    
+
     # TODO Get rid of datamodule requirement of predict_dataset.
     data_module = get_data_module(cfg=cfg, dataset=dataset)
 
@@ -86,6 +85,7 @@ def main():
     )
 
     print(f"Outputted to {predictions_file}")
+
 
 if __name__ == "__main__":
     main()
