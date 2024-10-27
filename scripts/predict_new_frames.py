@@ -10,7 +10,7 @@ def main():
     
     Example: python scripts/predict_new_frames.py \
         --model_dir outputs/pr-sup-heatmap-singleview-1gpu/21-51-47 \
-        --data_dir=data/mirror-mouse/ \
+        --data_dir data/mirror-mouse/ \
         --labels_file data/mirror-mouse/CollectedData_new.csv \
         --predictions_file outputs/ood_preds/test_out.csv
     """
@@ -45,13 +45,15 @@ def main():
         ckpt_path_from_base_path,
     )
     from lightning_pose.utils.predictions import load_model_from_checkpoint, predict_dataset
-    ckpt_file = ckpt_path_from_base_path(
-        base_path=model_dir, model_name=cfg.model.model_name
-    )
     from lightning_pose.utils.scripts import (
         get_data_module,
         get_dataset,
         get_imgaug_transform,
+    )
+
+    # TODO Combine this into one function to get model from a directory.
+    ckpt_file = ckpt_path_from_base_path(
+        base_path=model_dir, model_name=cfg.model.model_name
     )
     model = load_model_from_checkpoint(
         cfg=cfg,
@@ -59,24 +61,25 @@ def main():
         eval=True,
         skip_data_module=True
     )
-    trainer = pl.Trainer(accelerator="gpu", devices=1)
+
     pretty_print_str("Predicting images...")
 
-    print("getting imgaug transform...")
+    # TODO Make imgaug optional. if it's not passed, it should be default.
     imgaug_transform = get_imgaug_transform(cfg=cfg)
-    print("getting dataset...")
     dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
     
-    assert dataset is not None
-
     # TODO Get rid of datamodule requirement of predict_dataset.
-    print("getting data module...")
     data_module = get_data_module(cfg=cfg, dataset=dataset)
+
+    # Need to call this to populate train/val/test for prediction handler annotation of set
+    # TODO This should go away by either
+    #  1. (preferred) Replacing predict_dataset datamodule argument with a plain dataset.
+    #    a. When PredictionHandler has no datamodule, it should not add `set` to df.
+    #  2. Independent of above, we could move the logic from setup to constructor.
     data_module.setup()
 
     predict_dataset(
         cfg=cfg,
-        trainer=trainer,
         model=model,
         data_module=data_module,
         preds_file=predictions_file,
