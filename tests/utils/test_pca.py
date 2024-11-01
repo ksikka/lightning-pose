@@ -7,6 +7,10 @@ import torch
 from lightning_pose.utils.fiftyone import check_lists_equal
 from lightning_pose.utils.pca import KeypointPCA
 
+"""
+def test_playground(cfg, base_data_module):
+    assert len(base_data_module) == len(base_data_module.train_dataset)
+"""
 
 def test_pca_keypoint_class_singleview(cfg, base_data_module_combined):
     num_train_ims = int(
@@ -255,8 +259,7 @@ def test_nan_pca():
         pca_cust_nan1.singular_values_[:d], pca_cust_nan2.singular_values_[:d], rtol=1e-2)
 
 
-def test_component_chooser():
-
+def test_get_num_components_to_keep():
     # create fake data for PCA
     from sklearn.datasets import load_diabetes
     from sklearn.decomposition import PCA
@@ -273,36 +276,25 @@ def test_component_chooser():
     pca = PCA(svd_solver="full")
     pca.fit(data_for_pca)
 
-    from lightning_pose.utils.pca import ComponentChooser
-
-    # regular integer behavior
-    comp_chooser_int = ComponentChooser(pca, 4)
-    assert comp_chooser_int() == 4
-
-    # can't keep more than 10 componets for diabetes data (obs dim = 10)
-    with pytest.raises(ValueError):
-        ComponentChooser(pca, 11)
-
-    # we return ints, so basically checking that 2 < 3
-    assert ComponentChooser(pca, 2)() < ComponentChooser(pca, 3)()
+    from lightning_pose.utils.pca import get_num_components_to_keep
 
     # can't explain more than 1.0 of the variance
     with pytest.raises(ValueError):
-        ComponentChooser(pca, 1.04)
+        get_num_components_to_keep(pca, 1.04)
 
     # no negative proportions
     with pytest.raises(ValueError):
-        ComponentChooser(pca, -0.2)
+        get_num_components_to_keep(pca, -0.2)
 
     # typical behavior
-    n_comps = ComponentChooser(pca, 0.95)()
+    n_comps = get_num_components_to_keep(pca, 0.95)
     assert (n_comps > 0) and (n_comps <= 10)
 
     # for explaining exactly 1.0 of the variance, you should keep all 10 components
-    assert ComponentChooser(pca, 1.0)() == 10
+    assert get_num_components_to_keep(pca, 1.0) == 10
 
     # less explained variance -> less components kept
-    assert ComponentChooser(pca, 0.20)() < ComponentChooser(pca, 0.90)()
+    assert get_num_components_to_keep(pca, 0.20) < get_num_components_to_keep(pca, 0.90)
 
 
 def test_format_multiview_data_for_pca():

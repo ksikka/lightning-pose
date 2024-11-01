@@ -1,6 +1,5 @@
 """PCA class to assist with computing PCA losses."""
 
-import warnings
 from typing import List, Literal, Optional, Union
 
 import numpy as np
@@ -21,7 +20,6 @@ from lightning_pose.losses.helpers import EmpiricalEpsilon, convert_dict_values_
 # to ignore imports for sphix-autoapidoc
 __all__ = [
     "KeypointPCA",
-    "ComponentChooser",
     "format_multiview_data_for_pca",
 ]
 
@@ -35,12 +33,17 @@ class KeypointPCA(object):
         self,
         loss_type: Literal["pca_singleview", "pca_multiview"],
         data_module: Union[UnlabeledDataModule, BaseDataModule],
-        components_to_keep: Optional[Union[int, float]] = 0.99,
+        components_to_keep: Union[int, float] = 0.99,
         empirical_epsilon_percentile: float = 90.0,
         mirrored_column_matches: Optional[Union[ListConfig, List]] = None,
         columns_for_singleview_pca: Optional[Union[ListConfig, List]] = None,
         device: Union[Literal["cuda", "cpu"], torch.device] = "cpu",
     ) -> None:
+        """Args:
+            components_to_keep: if > 1, the integer number of components to keep.
+                otherwise, a float between 0.0 and 1.0 indicating the proportion of
+                explained variance.
+        """
         self.loss_type = loss_type
         self.data_module = data_module
         self.components_to_keep = components_to_keep
@@ -138,19 +141,17 @@ class KeypointPCA(object):
             # all views can be explained by 3 (x,y,z) coords
             # ignore self.components_to_keep_argument
             self._n_components_kept = 3
-            if self._n_components_kept != self.components_to_keep:
-                warnings.warn(
-                    f"for {self.loss_type} loss, you specified {self.components_to_keep} "
-                    f"components_to_keep, but we will instead keep {self._n_components_kept} "
-                    f"components"
-                )
         elif self.loss_type == "pca_singleview":
             if self.pca_object is not None:
-                self._n_components_kept = ComponentChooser(
-                    fitted_pca_object=self.pca_object,
-                    components_to_keep=self.components_to_keep,
-                ).__call__()
-        assert isinstance(self._n_components_kept, int)
+                if self.components_to_keep > 1:
+                    if isinstance(self.components_to_keep, float):
+                        assert self.components_to_keep.is_integer()
+                    self._n_components_kept = int(self.components_to_keep)
+                else:
+                    self._n_components_kept = get_num_components_to_keep(
+                        self.pca_object,
+                        float(self.components_to_keep),
+                    )
 
     def pca_prints(self) -> None:
         # call after we've fitted a pca object and selected how many components to keep
@@ -443,65 +444,32 @@ class NaNPCA(PCA):
 
 
 @typechecked
-class ComponentChooser:
-    """Determine the number of PCA components to keep."""
-
-    def __init__(
-        self,
+def get_num_components_to_keep(
         fitted_pca_object: PCA,
-        components_to_keep: Optional[Union[int, float]],
-    ) -> None:
-        self.fitted_pca_object = fitted_pca_object
-        # can be either a float indicating proportion of explained variance, or an
-        # integer specifying the number of components
-        self.components_to_keep = components_to_keep
-        self._check_components_to_keep()
+        min_variance_explained: float,
+    ) -> int:
+        """Determine the number of PCA components to keep.
 
-    # TODO: I dislike the confusing names (components_to_keep vs min_variance_explained)
-
-    @property
-    def cumsum_explained_variance(self) -> np.ndarray:
-        return np.cumsum(self.fitted_pca_object.explained_variance_ratio_)
-
-    def _check_components_to_keep(self) -> None:
-        # if int, ensure it's not too big
-        if type(self.components_to_keep) is int:
-            if self.components_to_keep > self.fitted_pca_object.n_components_:
-                raise ValueError(
-                    f"components_to_keep was set to {self.components_to_keep}, exceeding the "
-                    f"maximum value of {self.fitted_pca_object.n_components_} observation dims"
-                )
-        # if float, ensure a proportion between 0.0-1.0
-        elif type(self.components_to_keep) is float:
-            if self.components_to_keep < 0.0 or self.components_to_keep > 1.0:
-                raise ValueError(
-                    f"components_to_keep was set to {self.components_to_keep} while it has to be "
-                    f"between 0.0 and 1.0"
-                )
-
-    def _find_first_threshold_cross(self) -> int:
-        # find the index of the first element above a min_variance_explained threshold
-        assert type(
-            self.components_to_keep is float
-        )  # i.e., threshold crossing doesn't make sense with integer components_to_keep
-        if self.components_to_keep != 1.0:
-            components_to_keep = int(
-                np.where(self.cumsum_explained_variance >= self.components_to_keep)[0][0]
+        Args:
+            min_variance_explained: a float indicating the proportion of explained variance."""
+        if min_variance_explained < 0.0 or min_variance_explained > 1.0:
+            raise ValueError(
+                f"min_variance_explained was set to {min_variance_explained} while it has to be "
+                f"between 0.0 and 1.0"
             )
-            # cumsum is a d - 1 dimensional vector where the 0th element is the sum of the
+
+        # find the index of the first element above a min_variance_explained threshold
+        if min_variance_explained != 1.0:
+            cumsum_explained_variance = np.cumsum(fitted_pca_object.explained_variance_ratio_)
+            num_components_to_keep = int(
+                np.where(cumsum_explained_variance >= min_variance_explained)[0][0]
+            )
+            # cumsum_explained_variance is a d - 1 dimensional vector where the 0th element is the sum of the
             # 0th and 1st element of the d dimensional vector it is summing over
-            return components_to_keep + 1
+            return num_components_to_keep + 1
         else:  # if we want to keep all components, we need to return the number of components
             # we do this because there's an issue with == 1.0 in the cumsum_explained_variance
-            return len(self.fitted_pca_object.explained_variance_)
-
-    def __call__(self) -> int:
-        if type(self.components_to_keep) is int:
-            # return integer as is
-            return self.components_to_keep
-        elif type(self.components_to_keep) is float:
-            # find that integer that crosses the minimum explained variance
-            return self._find_first_threshold_cross()
+            return len(fitted_pca_object.explained_variance_)
 
 
 @typechecked
