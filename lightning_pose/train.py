@@ -177,7 +177,6 @@ def train(cfg: DictConfig) -> None:
         trainer=trainer,
         model=model,
         data_module=data_module_pred,
-        ckpt_file=best_ckpt,
         preds_file=preds_file,
     )
     # compute and save various metrics

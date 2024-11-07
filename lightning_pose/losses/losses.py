@@ -348,6 +348,7 @@ class PCALoss(Loss):
             predictions.device,
             torch.device(self.device),
         )
+        # TODO the below comment seems outdated, check with Matt.
         # compute either reprojection error or projection onto discarded evecs.
         # they will vary in the last dim, hence -1.
         return self.pca.compute_reprojection_error(data_arr=predictions)
