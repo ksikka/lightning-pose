@@ -8,7 +8,7 @@ on:
 jobs:
   pytest-ubuntu:
     # Ships with python 3.10. Using it saves time installing it.
-    runs-on: linux-gpu
+    runs-on: lit-test
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
