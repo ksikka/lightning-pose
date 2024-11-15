@@ -1,14 +1,14 @@
 name: Run tests
 on:
-  # Allow manually running from Github UI or API.
   workflow_dispatch:
-  # to re-run status checks, mark as draft then ready_for_review.
+  # to re-run status checks, mark PR as draft then ready_for_review.
   pull_request:
     types: [ready_for_review]
 jobs:
   pytest-ubuntu:
-    # Ships with python 3.10. Using it saves time installing it.
-    runs-on: linux-gpu
+    # For security, only run tests when authorized users trigger the request.
+    if: ${{ github.actor == 'ksikka' || github.actor == 'themattinthehatt' }}
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
