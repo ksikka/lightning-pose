@@ -12,7 +12,10 @@ from lightning_pose.utils.io import (
     return_absolute_data_paths,
     return_absolute_path,
 )
-from lightning_pose.utils.predictions import load_model_from_checkpoint
+from lightning_pose.utils.predictions import (
+    export_predictions_and_labeled_video,
+    load_model_from_checkpoint,
+)
 from lightning_pose.utils.scripts import (
     compute_metrics,
     export_predictions_and_labeled_video,
