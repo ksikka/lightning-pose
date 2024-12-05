@@ -18,7 +18,6 @@ from lightning_pose.utils.predictions import (
 )
 from lightning_pose.utils.scripts import (
     compute_metrics,
-    export_predictions_and_labeled_video,
     get_data_module,
     get_dataset,
     get_imgaug_transform,

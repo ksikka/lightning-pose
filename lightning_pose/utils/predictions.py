@@ -335,7 +335,6 @@ def predict_dataset(
     labeled_preds = trainer.predict(
         model=model,
         dataloaders=data_module.full_labeled_dataloader(),
-        return_predictions=True,
     )
 
     pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None)
