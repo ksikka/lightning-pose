@@ -79,9 +79,7 @@ def _compute_bbox_df(
     # Shape: (frames, x|y) -> (frames, x|y|h|w)
     bboxes = np.concatenate([bbox_toplefts, bbox_hws], axis=1)
 
-    index = pred_df.index
-
-    return pd.DataFrame(bboxes, index=index, columns=["x", "y", "h", "w"])
+    return pd.DataFrame(bboxes, index=pred_df.index, columns=["x", "y", "h", "w"])
 
 
 @typechecked
@@ -162,39 +160,82 @@ def _crop_video_moviepy(
 @typechecked
 def generate_cropped_labeled_frames(
     root_directory: Path,
-    output_directory: Path,
+    output_directory: Path, # rename detector_model_dir
     detector_cfg: DictConfig,
-    preds_file: Optional[Path] = None,
+    pred_df: Optional[pd.DataFrame] = None,
 ) -> None:
-    # Use predictions rather than CollectedData.csv because collected data can sometimes have NaNs.
-    preds_file = preds_file or output_directory / "predictions.csv"
-    # load predictions
-    pred_df = pd.read_csv(preds_file, header=[0, 1, 2], index_col=0)
-
-    # compute and save bbox_df
-    bbox_df = _compute_bbox_df(
-        pred_df, detector_cfg.anchor_keypoints, crop_ratio=detector_cfg.crop_ratio
-    )
+    """Given predictions of labeled frames, updates bbox.csv and cropped_images additively."""
+    if pred_df is None:
+        preds_file = output_directory / "predictions.csv"
+        pred_df = pd.read_csv(preds_file, header=[0, 1, 2], index_col=0)
 
     bbox_csv_path = output_directory / "cropped_images" / "bbox.csv"
     bbox_csv_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        existing_bbox_df = pd.read_csv(bbox_csv_path)
+    except FileNotFoundError:
+        existing_bbox_df = pd.DataFrame(index=pred_df.index, columns=["x", "y", "h", "w"])
+    
+    pred_df = pred_df.loc[pred_df.index.difference(existing_bbox_df.index)]
+    bbox_df = _compute_bbox_df(
+        pred_df, detector_cfg.anchor_keypoints, crop_ratio=detector_cfg.crop_ratio
+    )
+    bbox_df = pd.concat([existing_bbox_df, bbox_df])
+    
     bbox_df.to_csv(bbox_csv_path)
 
     _crop_images(bbox_df, root_directory, output_directory / "cropped_images")
 
+def predict_and_crop_any_new_labeled_frames(pose_model, detector_model):
+    # Not yet implemented.
+    # find the frames referenced by pose_model's labeled dataset that are not yet cropped.
+    #   load CollectedData.csv into a pd.DataFrame
+    #   load detector's bbox.csv into a pd.DataFrame
+    #   subtract the two to get a list of image paths that need cropping.
+    # run detector prediction on them (=> pred_df)
+    # then call:
+    
+    # generate_cropped_labeled_frames(
+    #     root_directory=pose_model.cfg.data.data_dir,
+    #     output_directory=detector_model.get_cropped_data_dir(),
+    #     detector_cfg=detector_model.cfg,
+    #     pred_df=pred_df)
+    pass
+
+def predict_and_crop_any_new_videos(pose_model, detector_model):
+    # Not yet implemented.
+    # find the videos that are not yet cropped.
+    #   get video list from pose_model.cfg.data.video_dir
+    #   for each video path:
+    #     - does a corresponding detector corresponding bbox.csv exist?
+    #     - if so, continue
+    #       else
+    #         - predict video using detector model (=> pred_df)
+    #         - call:
+    
+    # generate_cropped_video(
+    #     video_path=video_path,
+    #     output_directory=detector_model.get_cropped_data_dir(),
+    #     detector_cfg=detector_model.cfg,
+    #     pred_df=pred_df)
+    pass
+
+def generate_cropped_csv_file(pose_model, detector_model):
+    pass
 
 @typechecked
 def generate_cropped_video(
-    video_path: Path, detector_model_dir: Path, detector_cfg: DictConfig
+    video_path: Path,
+    detector_model_dir: Path,
+    detector_cfg: DictConfig,
+    pred_df: Optional[pd.DataFrame] = None,
 ) -> None:
     video_path = Path(video_path)
 
-    # Given the predictions, compute cropping bboxes
-    preds_file = detector_model_dir / "video_preds" / (video_path.stem + ".csv")
-
-    # load predictions
-    # TODO If predictions do not exist, predict with detector model
-    pred_df = pd.read_csv(preds_file, header=[0, 1, 2], index_col=0)
+    if pred_df is None:
+        preds_file = detector_model_dir / "video_preds" / (video_path.stem + ".csv")
+        pred_df = pd.read_csv(preds_file, header=[0, 1, 2], index_col=0)
 
     # Save cropping bboxes
     bbox_df = _compute_bbox_df(
