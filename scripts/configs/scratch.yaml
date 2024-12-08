@@ -1,0 +1,122 @@
+## Config should mirror lightning pose objects.
+
+## DataSet: FrameDataset, LabeledFrameDataset, VideoDataset
+##     (They should support multiview and context frames natively.)
+##     Supports getting metadata about the dataset.
+##     Supports getting a single datapoint.
+## 
+## Model: (subclasses are CropzoomModel and EnsembleModel)
+##     Supports training on a dataset.
+##       Once trained, it is immutable (for now. In future we may support finetuning, training for more epochs with different data)
+##     Supports getting metadata on the model.
+##     Supports prediction on DataSet.
+##     NYI Supports prediction on a stream, outputs a stream
+##
+
+struct LabeledFrameDataset:
+  data_dir: /replace/with/your/path
+  csv_file: CollectedData.csv # or list for multiview
+  keypoint_names: [head, tail]
+  view_names: ?
+
+struct VideoDataset:
+  video_dir: /replace/with/your/path
+  view_names: ?
+
+struct Model:
+  ## These will become inherent properties of the model
+  name: null # Replace with model path?
+  path: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+ 
+  model_type: heatmap
+  backbone: resnet50_animal_ap10k
+
+  rng_seed_model_pt: 0
+  
+  image_resize_dims:
+    height: null
+    width: null
+  
+  downsample_factor: 2
+  
+  keypoint_names: [head, tail]
+
+  training_data:
+    # Seed for shuffling and for split
+    rng_seed_data_pt: 0
+    dali_seed: 123456
+    
+    labeled_frames_dataset: null
+    video_dataset: null
+    labeled_frames_data_split:
+      train_prob: 0.95
+      val_prob: 0.05
+
+    imgaug: dlc # TODO make this a list of augmentations.
+
+    train_frames: 1
+    uniform_heatmaps_for_nan_keypoints: true
+    
+  losses:
+    heatmap_loss_type: mse # Rename to just heatmap_loss?
+
+    anneal_weight: #rename to unsupervised_weight_annealing
+      # Remove: attr_name: total_unsupervised_importance
+      init_val: 0.0
+      increase_factor: 0.01
+      final_val: 1.0
+      freeze_until_epoch: 0 # remove? 
+
+    pca_multiview:
+      mirrored_column_matches: null
+      log_weight: 5.0
+      components_to_keep: 3
+      epsilon: null
+
+    pca_singleview:
+      columns_for_singleview_pca: null
+      log_weight: 5.0
+      components_to_keep: 0.99
+      epsilon: null
+
+    temporal:
+      log_weight: 5.0
+      epsilon: 20.0
+      prob_threshold: 0.05
+
+  # Rename backbone_unfreezing_epoch
+  unfreezing_epoch: 20
+
+  duration:
+    early_stopping: false
+    early_stop_patience: 3
+    min_epochs: 300
+    max_epochs: 300
+
+  batch_size:
+    train_labeled_frame: 16
+    train_unlabeled_frame: 16 # replace dali setting
+    val_labeled_frame: 32
+    val_unlabeled_frame: 32 # replace dali setting
+
+  learning_rate:
+    scheduler: multisteplr # renamed from lr_scheduler
+    multisteplr_params:
+      milestones: [150, 200, 250]
+      gamma: 0.5
+
+  # replace *_every_n_epochs fields
+  logging:
+    period: 10
+
+  validation:
+    period: 10
+
+  model_checkpoint:
+    period: null
+
+  parallelism:
+    num_gpus: 1
+    num_workers: 4 # rename num dataloader workers
+  
+  # Remove: checkpoint: null (loads model from checkpoint)
