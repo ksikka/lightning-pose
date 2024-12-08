@@ -108,8 +108,6 @@ def train(cfg: DictConfig) -> None:
         cfg.data.video_dir = detector_model.get_cropped_video_dir()
         cfg.data.csv_file = pose_model.get_cropped_csv_file_path()
 
-    # 4. post-process predictions: remap them to a different coordinate space.
-
     data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
 
     # ----------------------------------------------------------------------------------

@@ -222,6 +222,12 @@ def predict_and_crop_any_new_videos(pose_model, detector_model):
     pass
 
 def generate_cropped_csv_file(pose_model, detector_model):
+    # read csv file from pose_model.cfg.data.csv_file
+    # read bbox csv file from detector_model.get_cropped_data_dir() / "bbox.csv"
+    # for each row
+    #   - look up the bbox
+    #   - for each keypoint, subtract the bbox point
+    # save out new df in pose_model.get_cropped_csv_file_path()
     pass
 
 @typechecked
