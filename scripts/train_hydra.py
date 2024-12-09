@@ -3,7 +3,7 @@
 import hydra
 from omegaconf import DictConfig
 
-from lightning_pose.train import train
+from lightning_pose import train
 
 
 @hydra.main(config_path="configs", config_name="config_mirror-mouse-example")
@@ -32,7 +32,17 @@ def train_model(cfg: DictConfig):
 
     """
 
-    train(cfg)
+    model = train.train(cfg)
+    train.predict_on_training_frames(model)
+    train.compute_metrics_on_training_frame_predictions(model)
+
+    if cfg.eval.predict_vids_after_training or model.is_detector():
+        train.predict_on_test_videos(model)
+        train.compute_metrics_on_test_videos(model)
+
+    if model.training_dataset.has_ood_labels():
+        train.predict_on_ood_frames(model)
+        train.compute_metrics_on_ood_frame_predictions(model)
 
 
 if __name__ == "__main__":

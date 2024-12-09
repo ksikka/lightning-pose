@@ -1,3 +1,4 @@
+import copy
 from pathlib import Path
 from typing import List, Optional
 
@@ -7,6 +8,7 @@ from moviepy.editor import VideoFileClip
 from omegaconf import DictConfig
 from PIL import Image
 from typeguard import typechecked
+from omegaconf import OmegaConf
 
 from lightning_pose.utils.io import get_context_img_paths
 
@@ -80,9 +82,7 @@ def _compute_bbox_df(
     # Shape: (frames, x|y) -> (frames, x|y|h|w)
     bboxes = np.concatenate([bbox_toplefts, bbox_hws], axis=1)
 
-    index = pred_df.index
-
-    return pd.DataFrame(bboxes, index=index, columns=["x", "y", "h", "w"])
+    return pd.DataFrame(bboxes, index=pred_df.index, columns=["x", "y", "h", "w"])
 
 
 @typechecked
@@ -163,39 +163,99 @@ def _crop_video_moviepy(
 @typechecked
 def generate_cropped_labeled_frames(
     root_directory: Path,
-    output_directory: Path,
+    output_directory: Path, # rename detector_model_dir
     detector_cfg: DictConfig,
-    preds_file: Optional[Path] = None,
+    pred_df: Optional[pd.DataFrame] = None,
 ) -> None:
-    # Use predictions rather than CollectedData.csv because collected data can sometimes have NaNs.
-    preds_file = preds_file or output_directory / "predictions.csv"
-    # load predictions
-    pred_df = pd.read_csv(preds_file, header=[0, 1, 2], index_col=0)
-
-    # compute and save bbox_df
-    bbox_df = _compute_bbox_df(
-        pred_df, list(detector_cfg.anchor_keypoints), crop_ratio=detector_cfg.crop_ratio
-    )
+    """Given predictions of labeled frames, updates bbox.csv and cropped_images additively."""
+    if pred_df is None:
+        preds_file = output_directory / "predictions.csv"
+        pred_df = pd.read_csv(preds_file, header=[0, 1, 2], index_col=0)
 
     bbox_csv_path = output_directory / "cropped_images" / "bbox.csv"
     bbox_csv_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        existing_bbox_df = pd.read_csv(bbox_csv_path)
+    except FileNotFoundError:
+        existing_bbox_df = pd.DataFrame(index=pred_df.index, columns=["x", "y", "h", "w"])
+    
+    pred_df = pred_df.loc[pred_df.index.difference(existing_bbox_df.index)]
+    bbox_df = _compute_bbox_df(
+        pred_df, detector_cfg.anchor_keypoints, crop_ratio=detector_cfg.crop_ratio
+    )
+    bbox_df = pd.concat([existing_bbox_df, bbox_df])
+    
     bbox_df.to_csv(bbox_csv_path)
 
     _crop_images(bbox_df, root_directory, output_directory / "cropped_images")
 
+def predict_and_crop_any_new_labeled_frames(pose_model, detector_model):
+    # Not yet implemented.
+    # find the frames referenced by pose_model's labeled dataset that are not yet cropped.
+    #   load CollectedData.csv into a pd.DataFrame
+    #   load detector's bbox.csv into a pd.DataFrame
+    #   subtract the two to get a list of image paths that need cropping.
+    # run detector prediction on them (=> pred_df)
+    # then call:
+    
+    # generate_cropped_labeled_frames(
+    #     root_directory=pose_model.cfg.data.data_dir,
+    #     output_directory=detector_model.get_cropped_data_dir(),
+    #     detector_cfg=detector_model.cfg,
+    #     pred_df=pred_df)
+    pass
+
+def predict_and_crop_any_new_videos(pose_model, detector_model):
+    # Not yet implemented.
+    # find the videos that are not yet cropped.
+    #   get video list from pose_model.cfg.data.video_dir
+    #   for each video path:
+    #     - does a corresponding detector corresponding bbox.csv exist?
+    #     - if so, continue
+    #       else
+    #         - predict video using detector model (=> pred_df)
+    #         - call:
+    
+    # generate_cropped_video(
+    #     video_path=video_path,
+    #     output_directory=detector_model.get_cropped_data_dir(),
+    #     detector_cfg=detector_model.cfg,
+    #     pred_df=pred_df)
+    pass
+
+def generate_cropped_csv_file(pose_model, detector_model):
+    # read csv file from pose_model.cfg.data.csv_file
+    # read bbox csv file from detector_model.get_cropped_data_dir() / "bbox.csv"
+    # for each row
+    #   - look up the bbox
+    #   - for each keypoint, subtract the bbox point
+    # save out new df in pose_model.get_cropped_csv_file_path()
+    pass
+
+def remap_preds_csv_for_labeled_frames(preds_df, detector_model, remapped_preds_file):
+    # This will resemble the reverse of generate_cropped_csv_file.
+
+    # read bbox csv file from detector_model.get_cropped_data_dir() / "bbox.csv"
+    # for each row
+    #   - look up the bbox
+    #   - for each keypoint, add the bbox point
+    # save out new df in pose_model.remapped_preds_file
+    pass
+
 
 @typechecked
 def generate_cropped_video(
-    video_path: Path, detector_model_dir: Path, detector_cfg: DictConfig
+    video_path: Path,
+    detector_model_dir: Path,
+    detector_cfg: DictConfig,
+    pred_df: Optional[pd.DataFrame] = None,
 ) -> None:
     video_path = Path(video_path)
 
-    # Given the predictions, compute cropping bboxes
-    preds_file = detector_model_dir / "video_preds" / (video_path.stem + ".csv")
-
-    # load predictions
-    # TODO If predictions do not exist, predict with detector model
-    pred_df = pd.read_csv(preds_file, header=[0, 1, 2], index_col=0)
+    if pred_df is None:
+        preds_file = detector_model_dir / "video_preds" / (video_path.stem + ".csv")
+        pred_df = pd.read_csv(preds_file, header=[0, 1, 2], index_col=0)
 
     # Save cropping bboxes
     bbox_df = _compute_bbox_df(
@@ -209,3 +269,32 @@ def generate_cropped_video(
 
     # Generate a cropped video for debugging purposes.
     _crop_video_moviepy(video_path, bbox_df, detector_model_dir / "cropped_videos")
+
+
+class DetectorModel:
+    def __init__(self, model_path: Path):
+        self.model_path = model_path
+
+    def get_cropped_data_dir(self):
+        return self.model_path / "cropped_images"
+
+    def get_cropped_video_dir(self):
+        return self.model_path / "cropped_videos"
+
+class PoseModel:
+    def __init__(self, model_path: Path):
+        self.model_path = model_path
+        self.cfg = OmegaConf.load(model_path / "config.yaml")
+
+    def get_cropped_predictions_csv_path(self):
+        return self.model_path / "cropped_predictions.csv"
+
+    def get_cropped_csv_file_path(self):
+        return self.model_path / "cropped_labels" / Path(self.cfg.data.csv_file).name
+
+    def get_cropped_cfg(self, detector_model):
+        cropped_cfg = copy.deepcopy(self.cfg)
+        cropped_cfg.data.data_dir = detector_model.get_cropped_data_dir()
+        cropped_cfg.data.video_dir = detector_model.get_cropped_video_dir()
+        cropped_cfg.data.csv_file = self.get_cropped_csv_file_path()
+        return cropped_cfg

@@ -91,6 +91,27 @@ def test_train_singleview_detector_outputs(cfg, tmp_path):
     assert (tmp_path / "cropped_videos" / "test_vid.mp4").is_file()
     assert (tmp_path / "cropped_videos" / "test_vid_bbox.csv").is_file()
 
+def test_train_singleview_pose_estimator(cfg, tmp_path):
+    cfg = _test_cfg(cfg)
+    with open_dict(cfg):
+        cfg.detector_name = "test_detector"
+
+    # temporarily change working directory to temp output directory
+    with chdir(tmp_path):
+        # train model
+        train(cfg)
+
+    # design: in beginning of train, if we see detector name, we're going to overwrite a bunch of config.
+    # the saved out config will have these changes saved for record keeping / potential UI display purposes.
+    
+    assert (tmp_path / "cropped_images" / "labeled-data" / "img00.png").is_file()
+    assert (tmp_path / "cropped_images" / "labeled-data" / "img92.png").is_file()
+    assert (tmp_path / "cropped_images" / "bbox.csv").is_file()
+
+    # ensure cropped videos were properly processed
+    assert (tmp_path / "cropped_videos" / "test_vid.mp4").is_file()
+    assert (tmp_path / "cropped_videos" / "test_vid_bbox.csv").is_file()
+
 
 def test_train_multiview(cfg_multiview, tmp_path):
     from lightning_pose.train import train
