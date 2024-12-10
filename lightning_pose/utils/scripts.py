@@ -1,5 +1,6 @@
 """Helper functions to build pipeline components from config dictionary."""
 
+import copy
 import os
 import warnings
 from collections import OrderedDict
@@ -31,7 +32,6 @@ from lightning_pose.metrics import (
     temporal_norm,
 )
 from lightning_pose.models import (
-    ALLOWED_MODELS,
     HeatmapTracker,
     HeatmapTrackerMHCRNN,
     RegressionTracker,
@@ -43,8 +43,10 @@ from lightning_pose.utils.io import (
     check_if_semi_supervised,
     get_keypoint_names,
     return_absolute_path,
+    return_absolute_data_paths,
 )
 from lightning_pose.utils.pca import KeypointPCA
+
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -209,6 +211,18 @@ def get_data_module(
         )
     return data_module
 
+def get_data_module_pred(cfg):
+    # make unaugmented data_loader for prediction.
+    cfg_pred = copy.deepcopy(cfg)
+    data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
+    cfg_pred.training.imgaug = "default"
+    imgaug_transform_pred = get_imgaug_transform(cfg=cfg_pred)
+    dataset_pred = get_dataset(
+        cfg=cfg_pred, data_dir=data_dir, imgaug_transform=imgaug_transform_pred
+    )
+    data_module_pred = get_data_module(cfg=cfg_pred, dataset=dataset_pred, video_dir=video_dir)
+    data_module_pred.setup()
+    return data_module_pred
 
 @typechecked
 def get_loss_factories(
@@ -576,6 +590,7 @@ def compute_metrics(
             )
     else:
         if isinstance(cfg.data.csv_file, str):
+            # CZ: this needs to change somehow. 
             labels_file = return_absolute_path(
                 os.path.join(cfg.data.data_dir, cfg.data.csv_file)
             )
@@ -591,7 +606,7 @@ def compute_metrics(
 @typechecked
 def compute_metrics_single(
     cfg: DictConfig,
-    labels_file: str,
+    labels_file: str, # seems this was pulled out of cfg for multiview case.
     preds_file: str,
     data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
 ) -> None:

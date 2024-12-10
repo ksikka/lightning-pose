@@ -1,5 +1,6 @@
 """Functions for predicting keypoints on labeled datasets and unlabeled videos."""
 
+import copy
 import datetime
 import gc
 import os
@@ -23,6 +24,9 @@ from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import count_frames
 from lightning_pose.models import ALLOWED_MODELS
 from lightning_pose.utils import pretty_print_str
+from lightning_pose.utils.scripts import (
+    get_imgaug_transform, get_data_module_pred
+)
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -299,8 +303,9 @@ class PredictionHandler:
 @typechecked
 def predict_dataset(
     cfg: DictConfig,
-    data_module: BaseDataModule,
-    preds_file: str,
+    data_module: Optional[BaseDataModule] = None,
+    preds_file: str = "predictions.csv",
+    preds_file_suffix: str = "",
     ckpt_file: Optional[str] = None,
     trainer: Optional[pl.Trainer] = None,
     model: Optional[ALLOWED_MODELS] = None,
@@ -319,6 +324,10 @@ def predict_dataset(
         pandas dataframe with predictions or dict with dataframe of predictions for each view
 
     """
+    if data_module is None:
+        # make unaugmented data_loader for prediction.        
+        data_module = get_data_module_pred(cfg)
+        data_module.setup()
 
     delete_model = False
     if model is None:
@@ -340,7 +349,12 @@ def predict_dataset(
 
     pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None)
     labeled_preds_df = pred_handler(preds=labeled_preds)
+
+    # Add preds_file_suffix
+    preds_file.replace(".csv", f"_{preds_file_suffix}.csv")
+
     if isinstance(labeled_preds_df, dict):
+        # Make one preds file per view.
         for view_name, df in labeled_preds_df.items():
             df.to_csv(preds_file.replace(".csv", f"_{view_name}.csv"))
     else:
