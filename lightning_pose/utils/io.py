@@ -89,7 +89,7 @@ def check_if_semi_supervised(losses_to_use: Union[ListConfig, list, None] = None
 @typechecked
 def get_keypoint_names(
     cfg: Optional[DictConfig] = None,
-    csv_file: Optional[str] = None,
+    csv_file: Optional[Union[str | Path]] = None,
     header_rows: Optional[list] = [0, 1, 2],
 ) -> List[str]:
     if os.path.exists(csv_file):

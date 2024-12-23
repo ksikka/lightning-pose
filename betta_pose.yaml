@@ -1,0 +1,120 @@
+detector_name: outputs/betta_ood_preds/model_sup_1_1
+data:
+  image_resize_dims:
+    height: 256
+    width: 256
+  base_dir: /home/ksikka/lightning-pose
+  data_dir: ${data.base_dir}/data/betta
+  video_dir: ${data.data_dir}/videos
+  csv_file: CollectedData.csv
+  downsample_factor: 2
+  num_keypoints: 14
+  keypoint_names:
+  - A_head
+  - B_rightoperculum
+  - C_tailbase
+  - D_tailtip
+  - E_leftoperculum
+  - F_spine1
+  - G_spine2
+  - H_spine3
+  - I_spine4
+  - J_spine5
+  - K_spine6
+  - L_spine7
+  - M_lefteye
+  - N_righteye
+  mirrored_column_matches: null
+  columns_for_singleview_pca:
+  - 0
+  - 1
+training:
+  imgaug: dlc-top-down
+  train_batch_size: 8
+  val_batch_size: 48
+  test_batch_size: 48
+  train_prob: 0.95
+  val_prob: 0.05
+  train_frames: 75
+  num_gpus: 1
+  num_workers: 4
+  early_stop_patience: 3
+  unfreezing_epoch: 20
+  min_epochs: 75
+  max_epochs: 120
+  ckpt_every_n_epochs: null
+  log_every_n_steps: 10
+  check_val_every_n_epoch: 5
+  gpu_id: 0
+  rng_seed_data_pt: 0
+  rng_seed_model_pt: 0
+  lr_scheduler: multisteplr
+  lr_scheduler_params:
+    multisteplr:
+      milestones:
+      - 150
+      - 200
+      - 250
+      gamma: 0.5
+model:
+  losses_to_use: []
+  backbone: resnet50
+  model_type: heatmap
+  heatmap_loss_type: mse
+  model_name: pose1
+  checkpoint: null
+dali:
+  general:
+    seed: 123456
+  base:
+    train:
+      sequence_length: 32
+    predict:
+      sequence_length: 128
+  context:
+    train:
+      batch_size: 16
+    predict:
+      sequence_length: 96
+losses:
+  pca_multiview:
+    log_weight: 5.0
+    components_to_keep: 3
+    epsilon: null
+  pca_singleview:
+    log_weight: 5.0
+    components_to_keep: 0.95
+    epsilon: null
+  temporal:
+    log_weight: 5.0
+    epsilon: 20.0
+    prob_threshold: 0.05
+eval:
+  hydra_paths:
+  - ' '
+  predict_vids_after_training: true
+  save_vids_after_training: true
+  fiftyone:
+    dataset_name: test
+    model_display_names:
+    - test_model
+    launch_app_from_script: false
+    remote: true
+    address: 127.0.0.1
+    port: 5151
+  test_videos_directory: ${data.video_dir}
+  confidence_thresh_for_vid: 0.9
+callbacks:
+  anneal_weight:
+    attr_name: total_unsupervised_importance
+    init_val: 0.0
+    increase_factor: 0.01
+    final_val: 1.0
+    freeze_until_epoch: 0
+
+hydra:
+  run:
+    dir: ${data.base_dir}/outputs/betta_ood_preds/model_${model.model_name}_1
+  sweep:
+    dir: multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}

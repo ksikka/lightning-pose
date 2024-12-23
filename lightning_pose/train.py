@@ -12,9 +12,11 @@ import numpy as np
 import torch
 from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 from typeguard import typechecked
+from hydra.utils import to_absolute_path
+
 
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
-from lightning_pose.utils.cropzoom import generate_cropped_labeled_frames, generate_cropped_video
+from lightning_pose.utils import cropzoom
 from lightning_pose.utils.io import (
     check_video_paths,
     ckpt_path_from_base_path,
@@ -58,10 +60,32 @@ def train(cfg: DictConfig) -> None:
     with open_dict(cfg):
         cfg.model.lightning_pose_version = lightning_pose_version
 
+    # ----------------------------------------------------------------------------------
+    # Save configuration in output directory
+    # ----------------------------------------------------------------------------------
+    # Done before training; files will exist even if script dies prematurely.
+    hydra_output_directory = os.getcwd()
+    print(f"Hydra output directory: {hydra_output_directory}")
+
+    # save config file
+    dest_config_file = Path(hydra_output_directory) / "config.yaml"
+    OmegaConf.save(config=cfg, f=dest_config_file, resolve=True)
     print("Our Hydra config file:")
     pretty_print_cfg(cfg)
 
-    # path handling for toy data
+    if cfg.get("detector_name") is not None:
+        detector_model = cropzoom.DetectorModel(Path(to_absolute_path(cfg.detector_name)))
+        pose_model = cropzoom.PoseModel(Path(hydra_output_directory))
+        # 1. Crop any data that detector didn't already crop (i.e. new labels or videos).
+        cropzoom.predict_and_crop_any_new_labeled_frames(pose_model, detector_model)
+        cropzoom.predict_and_crop_any_new_videos(pose_model, detector_model)
+        
+        # 2. Generate a csv_file in the cropped coordinate space.
+        cropzoom.generate_cropped_csv_file(pose_model, detector_model)
+
+        # 3. Rewrite config data_dir, video_dir, csv_file.
+        cfg = pose_model.get_cropped_cfg(detector_model)
+
     data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
 
     # ----------------------------------------------------------------------------------
@@ -82,17 +106,6 @@ def train(cfg: DictConfig) -> None:
 
     # model
     model = get_model(cfg=cfg, data_module=data_module, loss_factories=loss_factories)
-
-    # ----------------------------------------------------------------------------------
-    # Save configuration in output directory
-    # ----------------------------------------------------------------------------------
-    # Done before training; files will exist even if script dies prematurely.
-    hydra_output_directory = os.getcwd()
-    print(f"Hydra output directory: {hydra_output_directory}")
-
-    # save config file
-    dest_config_file = Path(hydra_output_directory) / "config.yaml"
-    OmegaConf.save(config=cfg, f=dest_config_file, resolve=True)
 
     # save labeled data file(s)
     if isinstance(cfg.data.csv_file, str):
@@ -118,8 +131,10 @@ def train(cfg: DictConfig) -> None:
     logger = pl.loggers.TensorBoardLogger("tb_logs", name=cfg.model.model_name)
     # Log hydra config to tensorboard as helpful metadata.
     for key, value in cfg.items():
+        if isinstance(value, DictConfig):
+            value = OmegaConf.to_yaml(value)
         logger.experiment.add_text(
-            "hydra_config_%s" % key, "```\n%s```" % OmegaConf.to_yaml(value)
+            f"hydra_config_{key}", f"```\n{value}```"
         )
 
     # early stopping, learning rate monitoring, model checkpointing, backbone unfreezing
@@ -230,7 +245,7 @@ def train(cfg: DictConfig) -> None:
         cfg.get("detector") is not None and cfg.detector.get("crop_ratio") is not None
     )
     if is_detector:
-        generate_cropped_labeled_frames(
+        cropzoom.generate_cropped_labeled_frames(
             root_directory=Path(data_dir),
             output_directory=Path(hydra_output_directory),
             detector_cfg=cfg.detector,
@@ -285,7 +300,7 @@ def train(cfg: DictConfig) -> None:
             )
 
             if is_detector:
-                generate_cropped_video(
+                cropzoom.generate_cropped_video(
                     video_path=Path(video_file),
                     detector_model_dir=Path(hydra_output_directory),
                     detector_cfg=cfg.detector,
