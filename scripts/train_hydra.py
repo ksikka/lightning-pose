@@ -3,7 +3,7 @@
 import hydra
 from omegaconf import DictConfig
 
-from lightning_pose.train import train
+from lightning_pose import train
 
 
 @hydra.main(config_path="configs", config_name="config_mirror-mouse-example")

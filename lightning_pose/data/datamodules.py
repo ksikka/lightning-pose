@@ -100,6 +100,10 @@ class BaseDataModule(pl.LightningDataModule):
             # we can't simply change the imgaug pipeline in the datasets after they've been split
             # because the subsets actually point to the same underlying dataset, so we create
             # separate datasets here
+            # Unrelated to the above - How do we model the split to pass to prediction handler?
+            # DataSplit = train_dataset, val_dataset, test_dataset (subsets?)
+            # DataSet = accessor class
+            # DataUniverse = whole thing?
             train_idxs, val_idxs, test_idxs = random_split(
                 range(len(self.dataset)),
                 data_splits_list,
@@ -137,7 +141,7 @@ class BaseDataModule(pl.LightningDataModule):
             batch_size=self.train_batch_size,
             num_workers=self.num_workers,
             persistent_workers=True if self.num_workers > 0 else False,
-            shuffle=True,
+            #shuffle=True,
             generator=torch.Generator().manual_seed(self.torch_seed),
         )
 

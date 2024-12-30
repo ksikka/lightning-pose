@@ -1,6 +1,5 @@
 """Dataset objects store images, labels, and functions for manipulation."""
-
-
+import copy
 import os
 import re
 from pathlib import Path
@@ -95,6 +94,13 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         self.num_keypoints = self.keypoints.shape[1]
 
         self.data_length = len(self.image_names)
+
+    def raw(self):
+        x = copy.copy(self)
+        # Use only resize transform.
+        x.imgaug_transform = x.imgaug_transform[-1]
+        return x
+
 
     @property
     def height(self) -> int:

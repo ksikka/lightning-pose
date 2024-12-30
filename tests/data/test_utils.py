@@ -23,6 +23,10 @@ def test_data_extractor(base_data_module_combined, multiview_heatmap_data_module
     keypoint_tensor, _ = DataExtractor(
         data_module=base_data_module_combined, cond="train"
     )()
+    raw_train_dataset = copy.copy(base_data_module_combined.train_dataset)
+    raw_train_dataset.dataset = raw_train_dataset.dataset.raw()
+    alternative_method = torch.vstack([x["keypoints"] for x in raw_train_dataset])
+    assert torch.allclose(keypoint_tensor, alternative_method, equal_nan=True)
     assert keypoint_tensor.shape == (num_frames, 34)  # 72 = 0.8 * 90 images, 17 * 2 coordinates
 
     keypoint_tensor, images_tensor = DataExtractor(

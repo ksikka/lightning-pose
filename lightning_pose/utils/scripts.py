@@ -1,4 +1,5 @@
-"""Helper functions to build pipeline components from config dictionary."""
+"""Helper functions to build pipeline components from config dictionary.
+TODO: move to lightning_pose._instantiate"""
 
 import os
 import warnings
@@ -553,7 +554,8 @@ def compute_metrics(
     preds_file: Union[str, List[str]],
     data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
 ) -> None:
-    """Compute various metrics on predictions csv file, potentially for multiple views."""
+    """Compute various metrics on predictions csv file, potentially for multiple views.
+    TODO: Move to lightning_pose.evaluation"""
     if (
         cfg.data.get("view_names", None)
         and len(cfg.data.view_names) > 1
@@ -595,7 +597,8 @@ def compute_metrics_single(
     preds_file: str,
     data_module: Optional[Union[BaseDataModule, UnlabeledDataModule]] = None,
 ) -> None:
-    """Compute various metrics on a predictions csv file from a single view."""
+    """Compute various metrics on a predictions csv file from a single view.
+    TODO: Move to lightning_pose.evaluation"""
 
     # get keypoint names
     labels_df = pd.read_csv(labels_file, header=[0, 1, 2], index_col=0)
