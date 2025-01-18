@@ -4,86 +4,108 @@
 Training
 ########
 
-Lightning Pose provides several tools for training models:
+Lightning pose provides the ``litpose train`` command to train models.
+It expects a valid config file, and outputs the newly trained model to a directory.
 
-#. A set of high-level functions used for creating data loaders, models, trainers, etc. You can combine these to create your own custom training script. This is required if you used the :ref:`pip package <pip_package>` installation method.
-#. An example training script provided in the :ref:`conda from source <conda_from_source>` installation method. This demonstrates how to combine the high-level functions for model training and evaluation.
+Training on your own dataset
+============================
+
+Create a valid config file
+--------------------------
+
+Copy the default config (`config_default.yaml`_)
+to a local file, and modify the ``data`` section to point to your own dataset. Sections other than
+``data`` have reasonable defaults for getting started. For example:
+
+.. code-block:: yaml
+
+   data:
+      image_resize_dims:
+        height: 256
+        width: 256
+      data_dir: /home/user1/data/
+      video_dir: /home/user1/data/videos
+      csv_file: labeled_frames.csv
+      downsample_factor: 2
+      # total number of keypoints
+      num_keypoints: 3
+      keypoint_names:
+          - paw_left
+          - paw_right
+          - nose_tip
+
+.. _config_default.yaml: https://github.com/paninski-lab/lightning-pose/blob/main/scripts/configs/config_default.yaml
+
+Train a model
+-------------
+
+To train a model, just point ``litpose train`` at your config file:
+
+.. code-block:: shell
+
+  # Replace 'config_default.yaml' with the path to your config file.
+  litpose train config_default.yaml
+
+The model will be saved in ``./outputs/{YYYY-MM-DD}/{HH:MM:SS}/``, creating the folder if it does not already exist.
+To customize the output directory, use the ``--output_dir OUTPUT_DIR`` flag of the command.
+
+.. code-block:: shell
+
+  # Save to 'outputs/lp_test_1'
+  litpose train config_default.yaml --output_dir outputs/lp_test_1
 
 .. note::
 
-    The steps below assume the :ref:`conda from source <conda_from_source>` installation method.
-    If you did not use this installation method, see the
-    `example training script <https://github.com/danbider/lightning-pose/blob/main/scripts/train_hydra.py>`_.
+    If the command ``litpose`` is not found, ensure that you've activated the conda
+    environment with lightning-pose installed, and that you're using version >= 1.7.0
+    (verify this using ``pip show lightning-pose``).
+
+For the full listing of training options, run ``litpose train --help``.
+
+Config overrides
+----------------
+
+If you want to override some config values before training, you can use the ``--overrides`` flag.
+This uses hydra under the hood, so refer to the `hydra syntax for config overrides`_.
+
+.. _hydra syntax for config overrides: https://hydra.cc/docs/advanced/override_grammar/basic/
+
+.. code-block:: shell
+
+  # Train for only 5 epochs
+  litpose train config_default.yaml --overrides training.min_epochs=5 training.max_epochs=5
+
+  # Train a supervised model
+  litpose train config_default.yaml --output_dir outputs/supervised --overrides \
+    model.losses_to_use=null
+
+Post-training flags
+-------------------
+
+After training, lightning pose can automatically predict on some videos
+and save out videos labeled with its predictions. The config settings that control this behavior are:
+
+* ``eval.predict_vids_after_training``: if ``true``, automatically run inference after training on
+  all videos located in the directory given by ``eval.test_videos_directory``; results are saved
+  to the model directory
+* ``eval.save_vids_after_training``: if ``true`` (as well as ``eval.predict_vids_after_training``)
+  the keypoints predicted during the inference step will be overlaid on the videos and saved with
+  inference outputs to the model directory
 
 
-Train with example data
-=======================
+Training on a sample dataset
+============================
 
-To train a model on the example dataset provided with the Lightning Pose package,
-run the following command from inside the ``lightning-pose`` directory
-(make sure you have activated your conda environment):
+To quickly try lightning-pose without your own dataset, the lightning-pose git repository provides a small
+sample dataset. Clone the repository and run the train command pointed at our sample config:
 
-.. code-block:: console
+.. code-block:: shell
 
-    python scripts/train_hydra.py
+    # (Skip this if you've already cloned, i.e. to install from source.)
+    git clone https://github.com/paninski-lab/lightning-pose
 
-Note there are no arguments - this tells the script to default to the example data.
-
-Train with your data
-====================
-
-To train a model on your own dataset, follow these steps:
-
-#. Ensure your data is in the :ref:`proper data format <directory_structure>`.
-#. Copy the file ``scripts/configs/config_default.yaml`` to another directory and rename it. You will then need to update the various fields to match your dataset (see :ref:`The configuration file <config_file>` section). See other config files in ``scripts/configs/`` for examples.
-#. Train your model from the terminal and overwrite the config path and config name with your newly created file:
-
-   .. code-block:: console
-
-       python scripts/train_hydra.py --config-path=<PATH/TO/YOUR/CONFIGS/DIR> --config-name=<CONFIG_NAME.yaml>
-
-You can find more information on the structure of the output model directory
-:ref:`below <model_directory_structure>`.
-
-Working with ``hydra``
-======================
-
-All of the scripts in the ``scripts`` directory rely on the ``hydra`` package to manage
-arguments in config files.
-You have two options: directly edit the config file, or override it from the command line.
-
-#. **Edit** the config file, and save it.
-   Then run the script without arguments:
-
-   .. code-block:: console
-
-       python scripts/train_hydra.py
-
-#. **Override** the argument from the command line; for example, if you want to use a maximum of 11
-   epochs instead of the default number (not recommended):
-
-   .. code-block:: console
-
-       python scripts/train_hydra.py training.max_epochs=11
-
-   Or, for your own dataset,
-
-   .. code-block::
-
-       python scripts/train_hydra.py --config-path=<PATH/TO/YOUR/CONFIGS/DIR> --config-name=<CONFIG_NAME.yaml> training.max_epochs=11
-
-We also recommend trying out training with resizing to smaller images first;
-this allows for larger batch sizes/fewer Out Of Memory errors on the GPU:
-
-.. code-block:: console
-
-    python scripts/train_hydra.py --config-path=<PATH/TO/YOUR/CONFIGS/DIR> --config-name=<CONFIG_NAME.yaml> data.image_resize_dims.height=256 data.image_resize_dims.width=256
-
-See more documentation on the config file fields :ref:`here <config_file>`. A couple of fields that
-are specific to the provided training script, but important to consider:
-
-* ``eval.predict_vids_after_training``: if ``true``, automatically run inference after training on all videos located in the directory given by ``eval.test_videos_directory``; results are saved to the model directory
-* ``eval.save_vids_after_training``: if ``true`` (as well as ``eval.predict_vids_after_training``) the keypoints predicted during the inference step will be overlaid on the videos and saved with inference outputs to the model directory
+    # Run from a directory containing the lightning-pose repo.
+    litpose train lightning-pose/scripts/configs/config_mirror-mouse-example.yaml
 
 Tensorboard
 ===========
@@ -186,3 +208,4 @@ We also compute all unsupervised losses, where applicable, and store them
 * ``predictions_pca_multiview_error.csv``: pca multiview reprojection error between predictions and labeled keypoints
 
 * ``predictions_pca_singleview_error.csv``: pca singleview reprojection error between predictions and labeled keypoints
+
