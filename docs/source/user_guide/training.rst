@@ -4,27 +4,21 @@
 Training
 ########
 
-When you install lightning pose via pip from source, it will also install a
-command-line tool ``litpose``.  The ``litpose train`` subcommand is used to
-train new models. It expects a valid config file, location of your dataset,
-and it trains and outputs a model to a new directory.
+Preparation
+===========
 
-The command-line tool is a wrapper around our python library. For an example
-of how to train a new model on new data programmatically, see its source code 
-under ``lightning_pose/cli/main.py``.
+If this is your first time training a model, you'll need to:
 
-Training a model using the command-line
-=======================================
+#. Organize your data (per the document in :ref:`directory_structure`)
+#. Create a valid config file
 
-If this is your first time training a model, you'll need to create a valid config file.
 After that, you are ready to train a model.
 
 Create a valid config file
 --------------------------
 
 Copy the default config (`config_default.yaml`_)
-to a local file, and modify the ``data`` section to point to your own dataset. Sections other than
-``data`` have reasonable defaults for getting started. For example:
+to a local file and modify the ``data`` section to point to your own dataset. For example:
 
 .. code-block:: yaml
 
@@ -45,8 +39,18 @@ to a local file, and modify the ``data`` section to point to your own dataset. S
 
 .. _config_default.yaml: https://github.com/paninski-lab/lightning-pose/blob/main/scripts/configs/config_default.yaml
 
-Train a model
--------------
+Sections other than ``data`` have reasonable defaults for getting started,
+but can be modified as well. For the full reference of fields, see :ref:`config_file`.
+
+Training a model using the command-line
+=======================================
+
+Since version 1.7.0, installing lightning-pose also installs the ``litpose`` command.
+The command ``litpose train`` is used to train new models.
+
+The command-line tool is a wrapper around our python library.
+If you wish to interface directly with the underlying python library,
+see the source code at ``lightning_pose/cli/main.py`` a usage example.
 
 To train a model, just point ``litpose train`` at your config file:
 
@@ -102,7 +106,9 @@ and save out videos labeled with its predictions. The config settings that contr
   inference outputs to the model directory
 
 
-Training on a sample dataset
+.. _training-on-sample-dataset:
+
+Training on sample dataset
 ============================
 
 To quickly try lightning-pose without your own dataset, the lightning-pose git repository provides a small
@@ -194,7 +200,7 @@ with absolute paths of your choosing.
     /path/to/models/YYYY-MM-DD/HH-MM-SS/
       ├── tb_logs/
       ├── video_preds/
-      │   └── labeled_videos/
+      │   └── labeled_videos/
       ├── config.yaml
       ├── predictions.csv
       ├── predictions_pca_multiview_error.csv
