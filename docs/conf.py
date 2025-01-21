@@ -69,12 +69,7 @@ default_dark_mode = True
 
 
 # If you want to document __init__() functions for python classes
-# https://stackoverflow.com/a/5599712
-def skip(app, what, name, obj, skip, options):
-    if name == "__init__":
-        return False
-    return skip
-
-
-def setup(app):
-    app.connect("autodoc-skip-member", skip)
+# https://stackoverflow.com/a/61732050/1925967
+autodoc_default_options = {
+    'special-members': '__init__',
+}

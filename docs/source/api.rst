@@ -1,5 +1,23 @@
+##################
 Lightning Pose API
-==================
+##################
+
+
+Training
+########
+
+.. autofunction:: lightning_pose.train.train
+
+Inference
+########
+
+.. autoclass:: lightning_pose.model.Model
+    :members:
+    :exclude-members: __init__, PredictionResult, predict_on_label_csv_internal
+
+
+Lightning Pose Internal API
+===========================
 
 * :ref:`metrics and callbacks modules <lp_modules>`
 * :ref:`data package <lp_modules_data>`
