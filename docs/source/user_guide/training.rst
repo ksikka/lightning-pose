@@ -4,11 +4,20 @@
 Training
 ########
 
-Lightning pose provides the ``litpose train`` command to train models.
-It expects a valid config file, and outputs the newly trained model to a directory.
+When you install lightning pose via pip from source, it will also install a
+command-line tool ``litpose``.  The ``litpose train`` subcommand is used to
+train new models. It expects a valid config file, location of your dataset,
+and it trains and outputs a model to a new directory.
 
-Training on your own dataset
-============================
+The command-line tool is a wrapper around our python library. For an example
+of how to train a new model on new data programmatically, see its source code 
+under ``lightning_pose/cli/main.py``.
+
+Training a model using the command-line
+=======================================
+
+If this is your first time training a model, you'll need to create a valid config file.
+After that, you are ready to train a model.
 
 Create a valid config file
 --------------------------

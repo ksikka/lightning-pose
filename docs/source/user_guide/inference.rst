@@ -4,38 +4,30 @@
 Inference
 #########
 
-Once you have trained a model you'll likely want to run inference on new videos.
+When you install lightning pose via pip from source, it will also install a
+command-line tool ``litpose``.  The ``litpose predict`` subcommand is used to
+run model inference on new data. It expects the location of your model,
+the location of the data you want to predict on, and it will output
+predictions to a subdirectory of the model directory.
 
-Similar to training, there are several tools for running inference:
+The command-line tool is a wrapper around our python library. For an example
+of how to predict on new data programmatically, see its source code 
+under ``lightning_pose/cli/main.py``.
 
-#. A set of high-level functions used for processing videos and creating labeled clips. You can combine these to create your own custom inference script. This is required if you used the :ref:`pip package <pip_package>` installation method.
-#. An example inference script provided in the :ref:`conda from source <conda_from_source>` installation method. This demonstrates how to combine the high-level functions.
+Inference on new videos using the command-line
+==============================================
+
+The ``litpose predict``
+
+.. code-block:: shell
+
+    python scripts/predict_new_vids.py --config-path=<PATH/TO/YOUR/CONFIGS/DIR> --config-name=<CONFIG_NAME.yaml>
 
 .. note::
 
-    The steps below assume the :ref:`conda from source <conda_from_source>` installation method.
-    If you did not use this installation method, see the
-    `example inference script <https://github.com/danbider/lightning-pose/blob/main/scripts/predict_new_vids.py>`_.
-    You can also see how video inference is handled in the
-    `example train script <https://github.com/danbider/lightning-pose/blob/main/scripts/train_hydra.py>`_.
+  Videos *must* be mp4 files that use the h.264 codec; see more information in the
+  :ref:`FAQs<faq_video_formats>`.
 
-Inference with example data
-===========================
-
-To run inference with a model trained on the example dataset, run the following command from
-inside the ``lightning-pose`` directory
-(make sure you have activated your conda environment):
-
-.. code-block:: console
-
-    python scripts/predict_new_vids.py eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"]
-
-This overwrites the config field ``eval.hydra_paths``, which is a list that contains the relative
-paths of the model folders you want to run inference with
-(you will need to replace "YYYY-MM-DD/HH-MM-SS/" with the timestamp of your own model).
-
-Inference with your data
-========================
 
 In order to use this script more generally, you need to update several config fields:
 
@@ -47,17 +39,13 @@ The results will be stored in the model directory.
 
 As with training, you either directly edit your config file and run:
 
-.. code-block:: console
+Inference with sample dataset
+=============================
 
-    python scripts/predict_new_vids.py --config-path=<PATH/TO/YOUR/CONFIGS/DIR> --config-name=<CONFIG_NAME.yaml>
+If you trained a model on the sample dataset included with the lightning pose repository,
+you can run the following command from inside the ``lightning-pose`` directory
+(make sure you have activated your conda environment):
 
-or override these arguments in the command line:
+.. code-block:: shell
 
-.. code-block:: console
-
-    python scripts/predict_new_vids.py --config-path=<PATH/TO/YOUR/CONFIGS/DIR> --config-name=<CONFIG_NAME.yaml> eval.hydra_paths=["YYYY-MM-DD/HH-MM-SS/"] eval.test_videos_directory=/absolute/path/to/videos
-
-.. note::
-
-  Videos *must* be mp4 files that use the h.264 codec; see more information in the
-  :ref:`FAQs<faq_video_formats>`.
+    litpose predict <model_dir> data/mirror-mouse-example/videos
