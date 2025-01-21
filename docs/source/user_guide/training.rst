@@ -49,8 +49,8 @@ Since version 1.7.0, installing lightning-pose also installs the ``litpose`` com
 The command ``litpose train`` is used to train new models.
 
 The command-line tool is a wrapper around our python library.
-If you wish to interface directly with the underlying python library,
-see the source code at ``lightning_pose/cli/main.py`` a usage example.
+If you wish to interface directly with the python library,
+see the source code at ``lightning_pose/cli/main.py`` for a usage example.
 
 To train a model, just point ``litpose train`` at your config file:
 
@@ -223,4 +223,3 @@ We also compute all unsupervised losses, where applicable, and store them
 * ``predictions_pca_multiview_error.csv``: pca multiview reprojection error between predictions and labeled keypoints
 
 * ``predictions_pca_singleview_error.csv``: pca singleview reprojection error between predictions and labeled keypoints
-

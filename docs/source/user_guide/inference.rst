@@ -8,8 +8,8 @@ Since version 1.7.0, installing lightning-pose also installs the ``litpose`` com
 The command ``litpose predict`` is used to run model inference on new data.
 
 The command-line tool is a wrapper around our python library.
-If you wish to interface directly with the underlying python library,
-see the source code at ``lightning_pose/cli/main.py`` a usage example.
+If you wish to interface directly with the python library,
+see the source code at ``lightning_pose/cli/main.py`` for a usage example.
 
 Inference on new videos using the command-line
 ==============================================
