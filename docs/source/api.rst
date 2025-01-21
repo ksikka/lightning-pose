@@ -4,12 +4,12 @@ Lightning Pose API
 
 
 Training
-########
+========
 
 .. autofunction:: lightning_pose.train.train
 
 Inference
-########
+=========
 
 .. autoclass:: lightning_pose.model.Model
     :members:
