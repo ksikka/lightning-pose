@@ -46,6 +46,11 @@ def _build_parser():
         "./outputs/{YYYY-MM-DD}/{HH:MM:SS}/",
     )
     train_parser.add_argument(
+        "--detector_model",
+        type=types.existing_model_dir,
+        help="cropzoom detector model",
+    )
+    train_parser.add_argument(
         "--overrides",
         nargs="*",
         metavar="KEY=VALUE",
@@ -148,7 +153,10 @@ def _train(args: argparse.Namespace):
         output_dir.mkdir(parents=True, exist_ok=True)
         # Maintain legacy hydra chdir until downstream no longer depends on it.
         os.chdir(output_dir)
-        train(cfg)
+        if args.detector_model:
+            train(cfg, detector_model=Model.from_dir(args.detector_model))
+        else:
+            train(cfg)
 
 
 def _predict(args: argparse.Namespace):

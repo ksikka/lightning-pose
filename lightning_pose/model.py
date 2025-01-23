@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import TypedDict
 
 import pandas as pd
+from lightning_pose.utils import cropzoom
 from omegaconf import DictConfig, OmegaConf
 
 from lightning_pose.model_config import ModelConfig
@@ -44,6 +45,7 @@ class Model:
         """Create a `Model` instance for a model stored at `model_dir`."""
         model_dir = Path(model_dir)
         config = ModelConfig.from_yaml_file(model_dir / "config.yaml")
+
         return Model(model_dir, config)
 
     def __init__(self, model_dir: str | Path, config: ModelConfig):
@@ -75,6 +77,15 @@ class Model:
 
     def labeled_videos_dir(self) -> Path:
         return self.model_dir / "video_preds" / "labeled_videos"
+
+    def cropped_data_dir(self):
+        return self.model_dir / "cropped_images"
+
+    def cropped_videos_dir(self):
+        return self.model_dir / "cropped_videos"
+
+    def cropped_csv_file_path(self, csv_file_path):
+        return self.model_dir / "cropped_images" / csv_file_path.name / ("cropped_" + csv_file_path.name)
 
     class PredictionResult(TypedDict):
         predictions: pd.DataFrame
@@ -120,6 +131,7 @@ class Model:
         generate_labeled_images: bool = False,
         output_dir: str | Path | None = UNSPECIFIED,
         output_filename_stem: str = "predictions",
+        bbox_filename_stem: str = "bbox",
         add_train_val_test_set: bool = False,
     ) -> PredictionResult:
         """
@@ -189,6 +201,39 @@ class Model:
                 data_module=data_module_pred,
             )
 
+        if self.config.is_detector():
+            """
+            Cropzoom detector directory structure:
+            
+            model_dir/
+                predictions.csv
+                bbox.csv
+
+                predictions_new.csv
+                bbox_new.csv
+
+                image_preds/
+                    <csv_file_name>/
+                        predictions.csv
+                        bbox.csv
+                        cropped_<csv_file_name>.csv
+
+                cropped_images/
+                    a/b/c/<image_name>.png
+            """
+
+            bbox_file_path = output_dir / (bbox_filename_stem + ".csv")
+            output_csv_file_path = output_dir / ("cropped_" + csv_file.name)
+            cropzoom.generate_cropped_labeled_frames(
+                input_data_dir=Path(data_dir),
+                input_csv_file=csv_file,
+                input_preds_file=preds_file_path,
+                detector_cfg=self.cfg.detector,
+                output_data_dir=self.cropped_data_dir(),
+                output_bbox_file=bbox_file_path,
+                output_csv_file=output_csv_file_path
+            )
+
         # TODO: Generate detector outputs.
 
         return self.PredictionResult(predictions=df)
@@ -249,6 +294,11 @@ class Model:
             # FIXME: This is only used for computing PCA metrics.
             data_module = _build_datamodule_pred(self.cfg)
             compute_metrics_fn(self.cfg, str(prediction_csv_file), data_module)
+
+        if self.config.is_detector():
+            # Hack: we're not cropping videos just yet.
+            # but create an empty directory to pass assertion in pose model train.
+            self.cropped_videos_dir().mkdir()
 
         return self.PredictionResult(predictions=df)
 

@@ -15,6 +15,7 @@ from typeguard import typechecked
 
 from lightning_pose.model import Model
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
+from lightning_pose.utils.cropzoom import generate_cropped_labeled_frames#, generate_cropped_video
 from lightning_pose.utils.io import return_absolute_data_paths
 from lightning_pose.utils.scripts import (
     calculate_train_batches,
@@ -29,14 +30,15 @@ from lightning_pose.utils.scripts import (
 # to ignore imports for sphinx-autoapidoc
 __all__ = ["train"]
 
+from lightning_pose.utils import cropzoom
 
 @typechecked
-def train(cfg: DictConfig) -> Model:
+def train(cfg: DictConfig, detector_model: Model | None = None) -> Model:
     """
     Trains a model using the configuration `cfg`. Saves model to current
     working directory (callers should `chdir` to the desired `model_dir` prior to calling).
     """
-    model = _train(cfg)
+    model = _train(cfg, detector_model)
     # Comment out the above, and uncomment the below to skip
     # training and go straight to post-training analysis:
     # import os
@@ -64,27 +66,19 @@ def _evaluate_on_training_dataset(model: Model):
             model.config.cfg.data.csv_file, model.config.cfg.data.data_dir
         )
         csv_files = [csv_file]
-        output_filename_stems = ["predictions"]
     else:
         csv_files = []
-        output_filename_stems = []
-        for csv_file, view_name in zip(
-            model.config.cfg.data.csv_file, model.config.cfg.data.view_names
-        ):
+        for csv_file in model.config.cfg.data.csv_file:
             csv_files.append(
                 _absolute_csv_file(csv_file, model.config.cfg.data.data_dir)
             )
-            output_filename_stems.append(f"predictions_{view_name}")
 
-    for csv_file, output_filename_stem in zip(csv_files, output_filename_stems):
+    for csv_file in csv_files:
         model.predict_on_label_csv_internal(
             csv_file=csv_file,
             data_dir=model.config.cfg.data.data_dir,
-            # TODO annotate with train/val/test split metadata.
             compute_metrics=True,
             generate_labeled_images=False,
-            output_dir=model.model_dir,
-            output_filename_stem=output_filename_stem,
             add_train_val_test_set=True,
         )
 
@@ -95,33 +89,23 @@ def _evaluate_on_ood_dataset(model: Model):
             model.config.cfg.data.csv_file, model.config.cfg.data.data_dir
         )
         ood_csv_file = csv_file.with_stem(csv_file.stem + "_new")
-        ood_csv_files = [ood_csv_file]
-        output_filename_stems = ["predictions_new"]
+        csv_files = [ood_csv_file]
     else:
-        ood_csv_files = []
-        output_filename_stems = []
-        for csv_file, view_name in zip(
-            model.config.cfg.data.csv_file, model.config.cfg.data.view_names
-        ):
-            csv_file = _absolute_csv_file(csv_file, model.config.cfg.data.data_dir)
+        csv_files = []
+        for csv_file in model.config.cfg.data.csv_file:
+            _absolute_csv_file(csv_file, model.config.cfg.data.data_dir)
             ood_csv_file = csv_file.with_stem(csv_file.stem + "_new")
-            ood_csv_files.append(ood_csv_file)
-            output_filename_stems.append(f"predictions_new_{view_name}")
-
-    if ood_csv_files[0].is_file():
-        pretty_print_str("Predicting OOD images...")
-
-        for ood_csv_file, output_filename_stem in zip(
-            ood_csv_files, output_filename_stems
-        ):
-            model.predict_on_label_csv_internal(
-                csv_file=ood_csv_file,
-                data_dir=model.config.cfg.data.data_dir,
-                compute_metrics=True,
-                generate_labeled_images=False,
-                output_dir=model.model_dir,
-                output_filename_stem=output_filename_stem,
+            csv_files.append(
+                ood_csv_file
             )
+
+    for csv_file in csv_files:
+        model.predict_on_label_csv_internal(
+            csv_file=csv_file,
+            data_dir=model.config.cfg.data.data_dir,
+            compute_metrics=True,
+            generate_labeled_images=False,
+        )
 
 
 def _predict_test_videos(model: Model):
@@ -136,7 +120,7 @@ def _predict_test_videos(model: Model):
             )
 
 
-def _train(cfg: DictConfig) -> Model:
+def _train(cfg: DictConfig, detector_model: Model | None = None) -> Model:
     # reset all seeds
     seed = 0
     os.environ["PYTHONHASHSEED"] = str(seed)
@@ -203,6 +187,58 @@ def _train(cfg: DictConfig) -> Model:
 
         dest_csv_file = Path(hydra_output_directory) / src_csv_file.name
         shutil.copyfile(src_csv_file, dest_csv_file)
+
+    if detector_model is not None:
+        """
+        Cropzoom pose-model directory structure:
+
+        model_dir/
+            <csv_file_name>.csv
+
+            cropped_labels/
+                <csv_file_name>.csv
+                
+        Detector train.
+            Regular _train
+            Predict and crop on labeled CSV (generates cropped outputs)
+            Predict on labeled OOD CSV (generates cropped outputs)
+        
+        Detector.predict_and_crop(csv_file):
+            (cached: return existing result if possible)
+            predict on CSV file, compute metrics, etc
+            generate bbox.csv, cropped images
+            cropzoom.transform_into_cropped_reference_frame(csv_file, bbox.csv, cropped_csv_file)
+        
+        Pose model train
+          cropped_csv_file = detector.predict_and_crop(csv_file)
+          RegularModel.train(cropped_csv_file)
+                          
+        Pose model predict on labeled CSV
+          cropped_csv_file = detector.predict_and_crop(csv_file)
+                    
+          RegularModel.Predict(cropped_csv_file)
+          # TODO remap predictions.
+          
+        Run detector on labeled CSV (if not exists) [NYI]
+            
+        """
+
+        # For training CSV file, right now assume there is a corresponding predictions.csv in model_dir.
+        # predictions.csv
+        #
+
+
+        # transform
+        import copy
+        cfg = copy.deepcopy(cfg)
+        cfg.data.detector_model_dir = str(detector_model.model_dir)
+        cfg.data.data_dir = str(detector_model.cropped_data_dir())
+        cfg.data.video_dir = str(detector_model.cropped_videos_dir())
+        if isinstance(cfg.data.csv_file, str):
+            cfg.data.csv_file = str(detector_model.cropped_csv_file_path(cfg.data.csv_file))
+        else:
+            cfg.data.csv_file = [str(detector_model.cropped_csv_file_path(f)) for f in cfg.data.csv_file]
+        cfg.eval.test_videos_directory = cfg.data.video_dir
 
     # ----------------------------------------------------------------------------------
     # Set up and run training

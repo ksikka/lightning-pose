@@ -28,6 +28,9 @@ class ModelConfig:
             )
         return True
 
+    def is_detector(self):
+        cfg.get("detector") is not None and cfg.detector.get("crop_ratio") is not None
+
     ## Eval ##
 
     def test_video_files(self) -> list[Path]:

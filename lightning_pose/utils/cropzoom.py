@@ -161,32 +161,42 @@ def _crop_video_moviepy(
 
 @typechecked
 def generate_cropped_labeled_frames(
-    root_directory: Path,
-    output_directory: Path,
+    input_data_dir: Path,
+    input_csv_file: Path,
+    input_preds_file: Path,
     detector_cfg: DictConfig,
-    preds_file: Path | None = None,
+    output_data_dir: Path,
+    output_bbox_file: Path,
+    output_csv_file: Path,
 ) -> None:
+    """Given model predictions, generates a bbox.csv, crops frames,
+    and a cropped csv file."""
     # Use predictions rather than CollectedData.csv because collected data can sometimes have NaNs.
-    preds_file = preds_file or output_directory / "predictions.csv"
     # load predictions
-    pred_df = pd.read_csv(preds_file, header=[0, 1, 2], index_col=0)
+    pred_df = pd.read_csv(input_preds_file, header=[0, 1, 2], index_col=0)
 
     # compute and save bbox_df
     bbox_df = _compute_bbox_df(
         pred_df, list(detector_cfg.anchor_keypoints), crop_ratio=detector_cfg.crop_ratio
     )
 
-    bbox_csv_path = output_directory / "cropped_images" / "bbox.csv"
-    bbox_csv_path.parent.mkdir(parents=True, exist_ok=True)
-    bbox_df.to_csv(bbox_csv_path)
+    output_bbox_file.parent.mkdir(parents=True, exist_ok=True)
+    bbox_df.to_csv(output_bbox_file)
 
-    _crop_images(bbox_df, root_directory, output_directory / "cropped_images")
+    _crop_images(bbox_df, input_data_dir, output_data_dir)
+
+    generate_cropped_csv_file(
+        input_csv_file=input_csv_file,
+        input_bbox_file=output_bbox_file,
+        output_csv_file=output_csv_file
+    )
 
 
 @typechecked
 def generate_cropped_video(
     video_path: Path, detector_model_dir: Path, detector_cfg: DictConfig
 ) -> None:
+    """TODO make consistent with generate_cropped_labeled_frames"""
     video_path = Path(video_path)
 
     # Given the predictions, compute cropping bboxes
@@ -208,3 +218,40 @@ def generate_cropped_video(
 
     # Generate a cropped video for debugging purposes.
     _crop_video_moviepy(video_path, bbox_df, detector_model_dir / "cropped_videos")
+
+
+def generate_cropped_csv_file(input_csv_file: Path, input_bbox_file: Path, output_csv_file: Path):
+    """Given a labeled dataset (CSV file, data dir),
+        that has already been predicted on by the detector ,
+        """
+    # Read csv file from pose_model.cfg.data.csv_file
+    # TODO: reuse header_rows logic from datasets.py
+    csv_data = pd.read_csv(input_csv_file, header=[0, 1, 2], index_col=0)
+
+    bbox_data = pd.read_csv(input_bbox_file, index_col=0)
+
+    def transform_bbox_to_csv_df_format(bbox_df, csv_df):
+        """
+        Transforms the bbox DataFrame to have a column MultiIndex
+        compatible with the csv_data DataFrame.
+        """
+        # Get unique scorers and keypoints from csv_data
+        scorers = csv_df.columns.get_level_values(0).unique()
+        keypoints = csv_df.columns.get_level_values(1).unique()
+
+        # Create a MultiIndex for the transformed bbox data
+        multi_index = pd.MultiIndex.from_product([scorers, keypoints, ['x', 'y']])
+
+        # Repeat bbox_data for each scorer and keypoint combination
+        repeated_bbox = pd.concat([bbox_df[['x', 'y']]] * len(scorers) * len(keypoints), axis=1)
+        repeated_bbox.columns = multi_index
+
+        return repeated_bbox
+
+
+    bbox_data = transform_bbox_to_csv_df_format(bbox_data, csv_data)
+    csv_data = csv_data - bbox_data
+
+    # Save out new df in pose_model.get_cropped_csv_file_path()
+    output_csv_file.parent.mkdir(parents=True, exist_ok=True)
+    csv_data.to_csv(output_csv_file)
