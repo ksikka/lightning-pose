@@ -27,7 +27,7 @@ __all__ = ["Model"]
 class Model:
     model_dir: Path
     """Directory the model is stored in."""
-    
+
     config: ModelConfig
     """The model configuration stored as a `ModelConfig` object.
     `ModelConfig` wraps the `omegaconf.DictConfig` and provides util functions
@@ -84,8 +84,14 @@ class Model:
     def cropped_videos_dir(self):
         return self.model_dir / "cropped_videos"
 
-    def cropped_csv_file_path(self, csv_file_path):
-        return self.model_dir / "cropped_images" / csv_file_path.name / ("cropped_" + csv_file_path.name)
+    def cropped_csv_file_path(self, csv_file_path: str | Path):
+        csv_file_path = Path(csv_file_path)
+        return (
+            self.model_dir
+            / "image_preds"
+            / csv_file_path.name
+            / ("cropped_" + csv_file_path.name)
+        )
 
     class PredictionResult(TypedDict):
         predictions: pd.DataFrame
@@ -204,7 +210,7 @@ class Model:
         if self.config.is_detector():
             """
             Cropzoom detector directory structure:
-            
+
             model_dir/
                 predictions.csv
                 bbox.csv
@@ -231,10 +237,8 @@ class Model:
                 detector_cfg=self.cfg.detector,
                 output_data_dir=self.cropped_data_dir(),
                 output_bbox_file=bbox_file_path,
-                output_csv_file=output_csv_file_path
+                output_csv_file=output_csv_file_path,
             )
-
-        # TODO: Generate detector outputs.
 
         return self.PredictionResult(predictions=df)
 

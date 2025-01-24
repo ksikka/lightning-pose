@@ -220,7 +220,11 @@ def generate_cropped_video(
     _crop_video_moviepy(video_path, bbox_df, detector_model_dir / "cropped_videos")
 
 
-def generate_cropped_csv_file(input_csv_file: Path, input_bbox_file: Path, output_csv_file: Path):
+def generate_cropped_csv_file(
+        input_csv_file: Path,
+        input_bbox_file: Path,
+        output_csv_file: Path
+):
     """Given a labeled dataset (CSV file, data dir),
         that has already been predicted on by the detector ,
         """
@@ -234,6 +238,8 @@ def generate_cropped_csv_file(input_csv_file: Path, input_bbox_file: Path, outpu
         """
         Transforms the bbox DataFrame to have a column MultiIndex
         compatible with the csv_data DataFrame.
+
+        This is so that later we can just subtract csv_df - bbox_df.
         """
         # Get unique scorers and keypoints from csv_data
         scorers = csv_df.columns.get_level_values(0).unique()
@@ -252,6 +258,5 @@ def generate_cropped_csv_file(input_csv_file: Path, input_bbox_file: Path, outpu
     bbox_data = transform_bbox_to_csv_df_format(bbox_data, csv_data)
     csv_data = csv_data - bbox_data
 
-    # Save out new df in pose_model.get_cropped_csv_file_path()
     output_csv_file.parent.mkdir(parents=True, exist_ok=True)
     csv_data.to_csv(output_csv_file)

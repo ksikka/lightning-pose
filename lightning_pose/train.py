@@ -15,7 +15,9 @@ from typeguard import typechecked
 
 from lightning_pose.model import Model
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
-from lightning_pose.utils.cropzoom import generate_cropped_labeled_frames#, generate_cropped_video
+from lightning_pose.utils.cropzoom import (
+    generate_cropped_labeled_frames,
+)  # , generate_cropped_video
 from lightning_pose.utils.io import return_absolute_data_paths
 from lightning_pose.utils.scripts import (
     calculate_train_batches,
@@ -31,6 +33,7 @@ from lightning_pose.utils.scripts import (
 __all__ = ["train"]
 
 from lightning_pose.utils import cropzoom
+
 
 @typechecked
 def train(cfg: DictConfig, detector_model: Model | None = None) -> Model:
@@ -95,17 +98,16 @@ def _evaluate_on_ood_dataset(model: Model):
         for csv_file in model.config.cfg.data.csv_file:
             _absolute_csv_file(csv_file, model.config.cfg.data.data_dir)
             ood_csv_file = csv_file.with_stem(csv_file.stem + "_new")
-            csv_files.append(
-                ood_csv_file
-            )
+            csv_files.append(ood_csv_file)
 
-    for csv_file in csv_files:
-        model.predict_on_label_csv_internal(
-            csv_file=csv_file,
-            data_dir=model.config.cfg.data.data_dir,
-            compute_metrics=True,
-            generate_labeled_images=False,
-        )
+    if csv_files[0].exists():
+        for csv_file in csv_files:
+            model.predict_on_label_csv_internal(
+                csv_file=csv_file,
+                data_dir=model.config.cfg.data.data_dir,
+                compute_metrics=True,
+                generate_labeled_images=False,
+            )
 
 
 def _predict_test_videos(model: Model):
@@ -168,6 +170,23 @@ def _train(cfg: DictConfig, detector_model: Model | None = None) -> Model:
     hydra_output_directory = os.getcwd()
     print(f"Hydra output directory: {hydra_output_directory}")
 
+    if detector_model is not None:
+        import copy
+
+        cfg = copy.deepcopy(cfg)
+        cfg.data.detector_model_dir = str(detector_model.model_dir)
+        cfg.data.data_dir = str(detector_model.cropped_data_dir())
+        cfg.data.video_dir = str(detector_model.cropped_videos_dir())
+        if isinstance(cfg.data.csv_file, str):
+            cfg.data.csv_file = str(
+                detector_model.cropped_csv_file_path(cfg.data.csv_file)
+            )
+        else:
+            cfg.data.csv_file = [
+                str(detector_model.cropped_csv_file_path(f)) for f in cfg.data.csv_file
+            ]
+        cfg.eval.test_videos_directory = cfg.data.video_dir
+
     # save config file
     dest_config_file = Path(hydra_output_directory) / "config.yaml"
     OmegaConf.save(config=cfg, f=dest_config_file, resolve=False)
@@ -187,58 +206,6 @@ def _train(cfg: DictConfig, detector_model: Model | None = None) -> Model:
 
         dest_csv_file = Path(hydra_output_directory) / src_csv_file.name
         shutil.copyfile(src_csv_file, dest_csv_file)
-
-    if detector_model is not None:
-        """
-        Cropzoom pose-model directory structure:
-
-        model_dir/
-            <csv_file_name>.csv
-
-            cropped_labels/
-                <csv_file_name>.csv
-                
-        Detector train.
-            Regular _train
-            Predict and crop on labeled CSV (generates cropped outputs)
-            Predict on labeled OOD CSV (generates cropped outputs)
-        
-        Detector.predict_and_crop(csv_file):
-            (cached: return existing result if possible)
-            predict on CSV file, compute metrics, etc
-            generate bbox.csv, cropped images
-            cropzoom.transform_into_cropped_reference_frame(csv_file, bbox.csv, cropped_csv_file)
-        
-        Pose model train
-          cropped_csv_file = detector.predict_and_crop(csv_file)
-          RegularModel.train(cropped_csv_file)
-                          
-        Pose model predict on labeled CSV
-          cropped_csv_file = detector.predict_and_crop(csv_file)
-                    
-          RegularModel.Predict(cropped_csv_file)
-          # TODO remap predictions.
-          
-        Run detector on labeled CSV (if not exists) [NYI]
-            
-        """
-
-        # For training CSV file, right now assume there is a corresponding predictions.csv in model_dir.
-        # predictions.csv
-        #
-
-
-        # transform
-        import copy
-        cfg = copy.deepcopy(cfg)
-        cfg.data.detector_model_dir = str(detector_model.model_dir)
-        cfg.data.data_dir = str(detector_model.cropped_data_dir())
-        cfg.data.video_dir = str(detector_model.cropped_videos_dir())
-        if isinstance(cfg.data.csv_file, str):
-            cfg.data.csv_file = str(detector_model.cropped_csv_file_path(cfg.data.csv_file))
-        else:
-            cfg.data.csv_file = [str(detector_model.cropped_csv_file_path(f)) for f in cfg.data.csv_file]
-        cfg.eval.test_videos_directory = cfg.data.video_dir
 
     # ----------------------------------------------------------------------------------
     # Set up and run training

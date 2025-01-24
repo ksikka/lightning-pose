@@ -29,7 +29,7 @@ class ModelConfig:
         return True
 
     def is_detector(self):
-        cfg.get("detector") is not None and cfg.detector.get("crop_ratio") is not None
+        return self.cfg.get("detector") is not None and self.cfg.detector.get("crop_ratio") is not None
 
     ## Eval ##
 
