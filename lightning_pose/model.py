@@ -152,9 +152,9 @@ class Model:
         """
 
         self._load()
-        csv_file = Path(csv_file)
+        csv_file = Path(csv_file).absolute()
         if data_dir is None:
-            data_dir = csv_file.parent
+            data_dir = self.cfg.data.data_dir
 
         if output_dir == self.__class__.UNSPECIFIED:
             output_dir = self.image_preds_dir() / csv_file.name
