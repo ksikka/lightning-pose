@@ -194,9 +194,13 @@ class Model:
         preds_file_path = output_dir / (output_filename_stem + ".csv")
         preds_file = str(preds_file_path)
 
-        df = predict_dataset(
-            cfg_pred, data_module_pred, model=self.model, preds_file=preds_file
-        )
+        if not self.config.is_detector():
+            df = predict_dataset(
+                cfg_pred, data_module_pred, model=self.model, preds_file=preds_file
+            )
+        else:
+            # Temporarily skip prediction so we can run cropping only in a CPU machine job
+            df = None
 
         if compute_metrics:
             # HACK: True multi-view model treated as single-view model, so preds_file is
