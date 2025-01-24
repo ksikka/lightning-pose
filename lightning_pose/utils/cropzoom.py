@@ -1,3 +1,4 @@
+import multiprocessing
 from pathlib import Path
 
 import numpy as np
@@ -5,6 +6,7 @@ import pandas as pd
 from moviepy.editor import VideoFileClip
 from omegaconf import DictConfig
 from PIL import Image
+import tqdm
 from typeguard import typechecked
 
 from lightning_pose.utils.io import get_context_img_paths
@@ -84,6 +86,24 @@ def _compute_bbox_df(
     return pd.DataFrame(bboxes, index=index, columns=["x", "y", "h", "w"])
 
 
+def _crop_center_img_path(center_img_path, root_directory, row, output_directory):
+    for img_path in get_context_img_paths(Path(center_img_path)):
+        # Silently skip non-existent context frames.
+        if not (root_directory / img_path).exists() and img_path != center_img_path:
+            continue
+        img = Image.open(root_directory / img_path)
+        img = img.crop((row.x, row.y, row.x + row.h, row.y + row.w))
+    
+        # preserve directory structure of img_path
+        # (e.g. labeled-data/x.png will create a labeled-data dir)
+        cropped_img_path = output_directory / img_path
+        cropped_img_path.parent.mkdir(parents=True, exist_ok=True)
+        img.save(cropped_img_path)
+    return cropped_img_path
+
+def _star_crop_center_img_path(args):
+    return _crop_center_img_path(*args)
+
 @typechecked
 def _crop_images(
     bbox_df: pd.DataFrame, root_directory: Path, output_directory: Path
@@ -92,19 +112,14 @@ def _crop_images(
 
     root_directory: root of img paths in bbox_df.
     output_directory: where to save cropped images."""
-    for center_img_path, row in bbox_df.iterrows():
-        for img_path in get_context_img_paths(Path(center_img_path)):
-            # Silently skip non-existent context frames.
-            if not (root_directory / img_path).exists() and img_path != center_img_path:
-                continue
-            img = Image.open(root_directory / img_path)
-            img = img.crop((row.x, row.y, row.x + row.h, row.y + row.w))
 
-            # preserve directory structure of img_path
-            # (e.g. labeled-data/x.png will create a labeled-data dir)
-            cropped_img_path = output_directory / img_path
-            cropped_img_path.parent.mkdir(parents=True, exist_ok=True)
-            img.save(cropped_img_path)
+    fn_args = []
+    for center_img_path, row in bbox_df.iterrows():
+        fn_args.append([center_img_path, root_directory, row, output_directory])
+    
+    with multiprocessing.Pool() as pool:
+        for _ in tqdm.tqdm(pool.imap(_star_crop_center_img_path, fn_args), total=len(fn_args)):
+            pass
 
 
 @typechecked

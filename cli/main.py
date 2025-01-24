@@ -4,6 +4,7 @@ import argparse
 import datetime
 import os
 import sys
+from omegaconf import OmegaConf
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -106,6 +107,11 @@ def _build_parser():
         action="store_true",
         help="skip generating prediction-annotated images/videos",
     )
+    post_prediction_args.add_argument(
+        "--detector_mode",
+        action="store_true",
+        help="pretend model is a detector",
+    )
     return parser
 
 
@@ -164,6 +170,11 @@ def _predict(args: argparse.Namespace):
     from lightning_pose.model import Model
 
     model = Model.from_dir(args.model_dir)
+    if args.detector_mode:
+        model.cfg.detector = OmegaConf.create({
+            "crop_ratio": 1.5,
+            "anchor_keypoints": ["topBeak", "tipTail", "leftWing", "rightWing", "leftFoot", "rightFoot"]
+        })
     input_paths = [Path(p) for p in args.input_path]
 
     for p in input_paths:
