@@ -15,9 +15,6 @@ from typeguard import typechecked
 
 from lightning_pose.model import Model
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
-from lightning_pose.utils.cropzoom import (
-    generate_cropped_labeled_frames,
-)  # , generate_cropped_video
 from lightning_pose.utils.io import return_absolute_data_paths
 from lightning_pose.utils.scripts import (
     calculate_train_batches,
@@ -31,8 +28,6 @@ from lightning_pose.utils.scripts import (
 
 # to ignore imports for sphinx-autoapidoc
 __all__ = ["train"]
-
-from lightning_pose.utils import cropzoom
 
 
 @typechecked
