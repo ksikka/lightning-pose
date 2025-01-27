@@ -48,6 +48,46 @@ def _calculate_bbox_size(
 
 
 @typechecked
+def _calculate_bbox_size_dynamic(
+    keypoints_per_frame: np.ndarray, crop_ratio: float = 1.0
+) -> np.ndarray:
+    """Given all labeled keypoints, computes the bounding box square size as
+    the length of one side in pixels.
+    First we compute the maximum bounding box that would always encompass
+    the animal (maximum difference of all x's and y's per frame, max over all frames).
+    Then we take the larger dimension of the bbox (x or y). Finally we scale by `crop_ratio`.
+
+    Arguments:
+        keypoints_per_frame: np array of all labeled frames. Shape of (frames, keypoints, x|y).
+        crop_ratio:
+    """
+    # Extract x and y coordinates
+    x_coords = keypoints_per_frame[:, :, 0]  # All rows, all columns, first element (x)
+    y_coords = keypoints_per_frame[:, :, 1]  # All rows, all columns, second element (y)
+    max_x_diff_per_frame = np.max(x_coords, axis=1) - np.min(x_coords, axis=1)
+    max_y_diff_per_frame = np.max(y_coords, axis=1) - np.min(y_coords, axis=1)
+
+    # Max of x_diff and y_diff for each frame. Shape of (frames,).
+    max_bbox_size_per_frame = np.max(
+        [max_x_diff_per_frame, max_y_diff_per_frame], axis=0
+    )
+
+    # Scale by crop_ratio, and take ceiling.
+    bbox_size_per_frame = np.ceil(max_bbox_size_per_frame * crop_ratio).astype(int)
+
+    # Many video players don't like odd dimensions.
+    # Make sure the bbox has even dimensions.
+    bbox_size_per_frame = np.where(
+        bbox_size_per_frame % 2 == 0, bbox_size_per_frame, bbox_size_per_frame + 1
+    )
+
+    # Change shape from (frames,) to (frames, 2), aka (frame, h|w)
+    bbox_sizes = np.column_stack((bbox_size_per_frame, bbox_size_per_frame))
+
+    return bbox_sizes
+
+
+@typechecked
 def _compute_bbox_df(
     pred_df: pd.DataFrame, anchor_keypoints: list[str], crop_ratio: float = 1.0
 ) -> pd.DataFrame:
@@ -63,23 +103,21 @@ def _compute_bbox_df(
         pred_df.loc[:, coord_mask].to_numpy().reshape(pred_df.shape[0], -1, 2)
     )
 
-    bbox_size = _calculate_bbox_size(keypoints_per_frame, crop_ratio=crop_ratio)
+    bbox_sizes = _calculate_bbox_size_dynamic(
+        keypoints_per_frame, crop_ratio=crop_ratio
+    )
 
     # Shape: (frames, keypoints, x|y) -> (frames, x|y)
     centroids = keypoints_per_frame.mean(axis=1)
 
     # Instead of storing centroid, we'll store bbox top-left.
     # Shape: (frames, x|y)
-    bbox_toplefts = centroids - bbox_size // 2
+    bbox_toplefts = centroids - bbox_sizes // 2
     # Floor and store ints.
     bbox_toplefts = np.int64(bbox_toplefts)
 
-    # Store bbox size as (h,w). Note that h=w since bbox is a square for now.
-    # Shape: (frames, h|w)
-    bbox_hws = np.full_like(bbox_toplefts, bbox_size)
-
     # Shape: (frames, x|y) -> (frames, x|y|h|w)
-    bboxes = np.concatenate([bbox_toplefts, bbox_hws], axis=1)
+    bboxes = np.concatenate([bbox_toplefts, bbox_sizes], axis=1)
 
     index = pred_df.index
 
@@ -93,7 +131,7 @@ def _crop_center_img_path(center_img_path, root_directory, row, output_directory
             continue
         img = Image.open(root_directory / img_path)
         img = img.crop((row.x, row.y, row.x + row.h, row.y + row.w))
-    
+
         # preserve directory structure of img_path
         # (e.g. labeled-data/x.png will create a labeled-data dir)
         cropped_img_path = output_directory / img_path
@@ -101,8 +139,10 @@ def _crop_center_img_path(center_img_path, root_directory, row, output_directory
         img.save(cropped_img_path)
     return cropped_img_path
 
+
 def _star_crop_center_img_path(args):
     return _crop_center_img_path(*args)
+
 
 @typechecked
 def _crop_images(
@@ -116,9 +156,11 @@ def _crop_images(
     fn_args = []
     for center_img_path, row in bbox_df.iterrows():
         fn_args.append([center_img_path, root_directory, row, output_directory])
-    
+
     with multiprocessing.Pool() as pool:
-        for _ in tqdm.tqdm(pool.imap(_star_crop_center_img_path, fn_args), total=len(fn_args)):
+        for _ in tqdm.tqdm(
+            pool.imap(_star_crop_center_img_path, fn_args), total=len(fn_args)
+        ):
             pass
 
 
@@ -203,7 +245,7 @@ def generate_cropped_labeled_frames(
     generate_cropped_csv_file(
         input_csv_file=input_csv_file,
         input_bbox_file=output_bbox_file,
-        output_csv_file=output_csv_file
+        output_csv_file=output_csv_file,
     )
 
 
@@ -236,13 +278,11 @@ def generate_cropped_video(
 
 
 def generate_cropped_csv_file(
-        input_csv_file: Path,
-        input_bbox_file: Path,
-        output_csv_file: Path
+    input_csv_file: Path, input_bbox_file: Path, output_csv_file: Path
 ):
     """Given a labeled dataset (CSV file, data dir),
-        that has already been predicted on by the detector ,
-        """
+    that has already been predicted on by the detector ,
+    """
     # Read csv file from pose_model.cfg.data.csv_file
     # TODO: reuse header_rows logic from datasets.py
     csv_data = pd.read_csv(input_csv_file, header=[0, 1, 2], index_col=0)
@@ -261,14 +301,15 @@ def generate_cropped_csv_file(
         keypoints = csv_df.columns.get_level_values(1).unique()
 
         # Create a MultiIndex for the transformed bbox data
-        multi_index = pd.MultiIndex.from_product([scorers, keypoints, ['x', 'y']])
+        multi_index = pd.MultiIndex.from_product([scorers, keypoints, ["x", "y"]])
 
         # Repeat bbox_data for each scorer and keypoint combination
-        repeated_bbox = pd.concat([bbox_df[['x', 'y']]] * len(scorers) * len(keypoints), axis=1)
+        repeated_bbox = pd.concat(
+            [bbox_df[["x", "y"]]] * len(scorers) * len(keypoints), axis=1
+        )
         repeated_bbox.columns = multi_index
 
         return repeated_bbox
-
 
     bbox_data = transform_bbox_to_csv_df_format(bbox_data, csv_data)
     csv_data = csv_data - bbox_data
