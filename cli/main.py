@@ -154,16 +154,20 @@ def _train(args: argparse.Namespace):
 
         # Delay this import because it's slow.
         from lightning_pose.train import train
+        from lightning_pose.model import Model
 
         # TODO: Move some aspects of directory mgmt to the train function.
         output_dir.mkdir(parents=True, exist_ok=True)
         # Maintain legacy hydra chdir until downstream no longer depends on it.
-        os.chdir(output_dir)
+        
+        detector_model = None
         if args.detector_model:
-            train(cfg, detector_model=Model.from_dir(args.detector_model))
-        else:
-            train(cfg)
+            # create detector model object before chdir so that relative path is resolved correctly
+            detector_model = Model.from_dir(args.detector_model)
 
+        os.chdir(output_dir)
+        train(cfg, detector_model=detector_model)
+        
 
 def _predict(args: argparse.Namespace):
     # Delay this import because it's slow.

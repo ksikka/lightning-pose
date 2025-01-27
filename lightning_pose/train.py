@@ -169,7 +169,8 @@ def _train(cfg: DictConfig, detector_model: Model | None = None) -> Model:
         import copy
 
         cfg = copy.deepcopy(cfg)
-        cfg.data.detector_model_dir = str(detector_model.model_dir)
+        with open_dict(cfg.data):
+            cfg.data.detector_model_dir = str(detector_model.model_dir)
         cfg.data.data_dir = str(detector_model.cropped_data_dir())
         cfg.data.video_dir = str(detector_model.cropped_videos_dir())
         if isinstance(cfg.data.csv_file, str):
