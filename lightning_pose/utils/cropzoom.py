@@ -302,41 +302,31 @@ def generate_cropped_video(
 
 
 def generate_cropped_csv_file(
-    input_csv_file: Path, input_bbox_file: Path, output_csv_file: Path
+    input_csv_file: str | Path,
+    input_bbox_file: str | Path,
+    output_csv_file: str | Path,
+    mode: str = "subtract",
 ):
-    """Given a labeled dataset (CSV file, data dir),
-    that has already been predicted on by the detector ,
+    """Translate a CSV file by bbox file.
+    Requires the files have the same index.
+
+    Defaults to subtraction. Can use mode='add' to map from cropped to original space.
     """
+    if mode not in ("add", "subtract"):
+        raise ValueError(f"{mode} is not a valid mode")
     # Read csv file from pose_model.cfg.data.csv_file
     # TODO: reuse header_rows logic from datasets.py
     csv_data = pd.read_csv(input_csv_file, header=[0, 1, 2], index_col=0)
 
     bbox_data = pd.read_csv(input_bbox_file, index_col=0)
 
-    def transform_bbox_to_csv_df_format(bbox_df, csv_df):
-        """
-        Transforms the bbox DataFrame to have a column MultiIndex
-        compatible with the csv_data DataFrame.
+    for col in csv_data.columns:
+        if col[-1] in ("x", "y"):
+            if mode == "subtract":
+                csv_data[col] = csv_data[col] - bbox_data[col[-1]]
+            else:
+                csv_data[col] = csv_data[col] + bbox_data[col[-1]]
 
-        This is so that later we can just subtract csv_df - bbox_df.
-        """
-        # Get unique scorers and keypoints from csv_data
-        scorers = csv_df.columns.get_level_values(0).unique()
-        keypoints = csv_df.columns.get_level_values(1).unique()
-
-        # Create a MultiIndex for the transformed bbox data
-        multi_index = pd.MultiIndex.from_product([scorers, keypoints, ["x", "y"]])
-
-        # Repeat bbox_data for each scorer and keypoint combination
-        repeated_bbox = pd.concat(
-            [bbox_df[["x", "y"]]] * len(scorers) * len(keypoints), axis=1
-        )
-        repeated_bbox.columns = multi_index
-
-        return repeated_bbox
-
-    bbox_data = transform_bbox_to_csv_df_format(bbox_data, csv_data)
-    csv_data = csv_data - bbox_data
-
+    output_csv_file = Path(output_csv_file)
     output_csv_file.parent.mkdir(parents=True, exist_ok=True)
     csv_data.to_csv(output_csv_file)
