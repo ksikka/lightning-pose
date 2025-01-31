@@ -176,7 +176,7 @@ def _predict(args: argparse.Namespace):
     model = Model.from_dir(args.model_dir)
     if args.detector_mode:
         model.cfg.detector = OmegaConf.create({
-            "crop_ratio": 1.5,
+            "crop_ratio": 2.0,
             "anchor_keypoints": ["topBeak", "tipTail", "leftWing", "rightWing", "leftFoot", "rightFoot"]
         })
     input_paths = [Path(p) for p in args.input_path]
