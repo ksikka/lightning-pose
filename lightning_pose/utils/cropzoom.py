@@ -168,7 +168,7 @@ def _crop_images(
                 if not _file_exists(root_directory / img_path):
                     continue
                 # The context frame is already in bbox_df as a center frame. Continue.
-                if img_path in bbox_df.index:
+                if str(img_path) in bbox_df.index:
                     continue
                 # There is already a crop task for the context frame. Continue.
                 if img_path in crop_calls:
