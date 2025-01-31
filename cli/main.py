@@ -49,7 +49,7 @@ def _build_parser():
     train_parser.add_argument(
         "--detector_model",
         type=types.existing_model_dir,
-        help="cropzoom detector model",
+        help="If specified, uses cropped training data in the detector model's directory.",
     )
     train_parser.add_argument(
         "--overrides",
@@ -110,7 +110,7 @@ def _build_parser():
     post_prediction_args.add_argument(
         "--detector_mode",
         action="store_true",
-        help="pretend model is a detector",
+        help="Run this on a trained model to output detector outputs (cropped images and labeled CSV file).",
     )
     return parser
 
