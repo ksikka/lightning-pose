@@ -161,7 +161,9 @@ def _crop_images(
     for center_img_path, row in tqdm.tqdm(
         bbox_df.iterrows(), total=len(bbox_df), desc="Building crop tasks"
     ):
-        for img_path in get_context_img_paths(Path(center_img_path)):
+        # TODO this logic badly needs testing!
+        center_img_path = Path(center_img_path)
+        for img_path in get_context_img_paths(center_img_path):
             # If context frame:
             if img_path != center_img_path:
                 # There is no context frame. Continue.
