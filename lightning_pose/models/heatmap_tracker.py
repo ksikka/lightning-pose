@@ -330,6 +330,7 @@ class HeatmapTracker(BaseSupervisedTracker):
             HeatmapLabeledBatchDict
             | MultiviewHeatmapLabeledBatchDict
             | UnlabeledBatchDict
+            | MultiviewUnlabeledBatchDict
         ),
         batch_idx: int,
         return_heatmaps: bool | None = False,
