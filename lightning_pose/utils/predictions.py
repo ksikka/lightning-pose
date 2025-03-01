@@ -903,23 +903,39 @@ def export_predictions_and_labeled_video(
 
     # create labeled video
     if labeled_mp4_file is not None:
-        os.makedirs(os.path.dirname(labeled_mp4_file), exist_ok=True)
-        # transform df to numpy array
-        keypoints_arr = np.reshape(preds_df.to_numpy(), [preds_df.shape[0], -1, 3])
-        xs_arr = keypoints_arr[:, :, 0]
-        ys_arr = keypoints_arr[:, :, 1]
-        mask_array = keypoints_arr[:, :, 2] > cfg.eval.confidence_thresh_for_vid
-        # video generation
-        video_clip = VideoFileClip(video_file)
-        create_labeled_video(
-            clip=video_clip,
-            xs_arr=xs_arr,
-            ys_arr=ys_arr,
-            mask_array=mask_array,
-            output_video_path=labeled_mp4_file,
+        generate_labeled_video(
+            video_file=video_file,
+            preds_df=preds_df,
+            output_mp4_file=labeled_mp4_file,
+            confidence_thresh_for_vid=cfg.eval.confidence_thresh_for_vid,
             colormap=cfg.eval.get("colormap", "cool")
         )
     return preds_df
+
+
+def generate_labeled_video(
+    video_file: str,
+    preds_df: pd.DataFrame,
+    output_mp4_file: str,
+    confidence_thresh_for_vid: float,
+    colormap: str,
+):
+    os.makedirs(os.path.dirname(output_mp4_file), exist_ok=True)
+    # transform df to numpy array
+    keypoints_arr = np.reshape(preds_df.to_numpy(), [preds_df.shape[0], -1, 3])
+    xs_arr = keypoints_arr[:, :, 0]
+    ys_arr = keypoints_arr[:, :, 1]
+    mask_array = keypoints_arr[:, :, 2] > confidence_thresh_for_vid
+    # video generation
+    video_clip = VideoFileClip(video_file)
+    create_labeled_video(
+        clip=video_clip,
+        xs_arr=xs_arr,
+        ys_arr=ys_arr,
+        mask_array=mask_array,
+        output_video_path=output_mp4_file,
+        colormap=colormap,
+    )
 
 
 @typechecked

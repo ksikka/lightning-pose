@@ -203,6 +203,7 @@ class Model:
 
         return self.PredictionResult(predictions=df)
 
+
     def predict_on_video_file(
         self,
         video_file: str | Path,
@@ -222,8 +223,62 @@ class Model:
         Returns:
             PredictionResult: A PredictionResult object containing the predictions and metrics.
         """
+
+        if output_dir == self.__class__.UNSPECIFIED:
+            output_dir = self.video_preds_dir()
+
+        elif output_dir is None:
+            raise NotImplementedError("Currently we must save predictions")
+
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        prediction_csv_file = output_dir / f"{video_file.stem}.csv"
+
+        labeled_mp4_file = None
+        if generate_labeled_video:
+            labeled_mp4_file = str(
+                self.labeled_videos_dir() / f"{video_file.stem}_labeled.mp4"
+            )
+
+        if self.config.cfg.eval.get("predict_vids_after_training_save_heatmaps", False):
+            raise NotImplementedError(
+                "Implement this after cleaning up _predict_frames: "
+                "Set a flag on the model to return heatmaps. "
+                "Use trainer.predict instead of side-stepping it."
+            )
+        df = export_predictions_and_labeled_video(
+            video_file=str(video_file),
+            cfg=self.config.cfg,
+            prediction_csv_file=str(prediction_csv_file),
+            labeled_mp4_file=labeled_mp4_file,
+            model=self.model,
+        )
+
+        if compute_metrics:
+            # FIXME: Data module is only used for computing PCA metrics.
+            data_module = _build_datamodule_pred(self.cfg)
+            compute_metrics_single(
+                cfg=self.cfg,
+                labels_file=None,
+                preds_file=str(prediction_csv_file),
+                data_module=data_module,
+            )
+
+        return self.PredictionResult(predictions=df)
+
+
+    def predict_on_video_file_per_view(
+        self,
+        video_files: list[str] | list[Path],
+        output_dir: str | Path | None = UNSPECIFIED,
+        compute_metrics: bool = True,
+        generate_labeled_video: bool = False,
+    ) -> PredictionResult:
+        """Predicts on a list of video files, one per view.
+        Use this for true multiview models (heatmap_multiview)."""
         self._load()
-        video_file = Path(video_file)
+        video_files = [Path(f) for f in video_files]
 
         if output_dir == self.__class__.UNSPECIFIED:
             output_dir = self.video_preds_dir()
