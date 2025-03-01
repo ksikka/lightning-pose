@@ -3,7 +3,9 @@
 import datetime
 import gc
 import os
+import re
 import time
+from pathlib import Path
 from typing import Tuple, Type
 
 import cv2
@@ -924,21 +926,33 @@ def export_predictions_and_labeled_video(
 def predict_video(
     video_file: str | list[str],
     model: Model,
-    output_pred_file: str | None = None,
+    output_pred_file: str | dict[str, str] | None = None,
     image_resize_dims: DictConfig | None = None,
     dali_settings: DictConfig | None = None,
 ) -> pd.DataFrame:
     """
     Args:
-        video_file: Predict on a video, or for true multiview models, a list of videos (one per view).
+        video_file: Predict on a video, or for true multiview models, a list of videos
+            (order: 1-1 correspondence with cfg.data.view_names).
         model: The model to predict with.
-        output_pred_file: (optional) File to save predictions in.
+        output_pred_file: (optional) File to save predictions in. For multiview, map from view_name to file.
         image_resize_dims: (optional) Overrides the config image_resize_dims.
         dali_settings: (optional) Overrides the config dali_settings.
     """
 
-    trainer = pl.Trainer(accelerator="gpu", devices=1, logger=False)
+    is_multiview = not isinstance(video_file, str)
 
+    if is_multiview:
+        # Validate output_pred_file is a dict
+        if output_pred_file is not None and not isinstance(output_pred_file, dict):
+            raise ValueError("for multiview prediction, 'output_pred_file' should be a dict of view_name -> file")
+
+        # Sanity check 1-1 correspondence of video_file to cfg.data.view_names
+        # (Important since PredictionHandler relies on the correspondence to organize the outputted dict).
+        for single_video_file, view_name in zip(video_file, model.config.cfg.data.view_names):
+            assert view_name in Path(single_video_file).stem, "expected video_file to correspond 1-1 with cfg.data.view_name"
+
+    trainer = pl.Trainer(accelerator="gpu", devices=1, logger=False)
     model_type = (
         "context" if model.config.cfg.model.model_type == "heatmap_mhcrnn" else "base"
     )
@@ -959,9 +973,7 @@ def predict_video(
     # get loader
     predict_loader = vid_pred_class()
 
-    is_multiview = not isinstance(video_file, str)
-    video_file = video_file[0] if is_multiview else video_file
-    frame_count = count_frames(video_file)
+    frame_count = count_frames(video_file[0] if is_multiview else video_file)
 
     # initialize prediction handler class
     pred_handler = PredictionHandler(
@@ -976,7 +988,6 @@ def predict_video(
         return_predictions=True,
     )
 
-    # call this instance on a single vid's preds
     preds_df = pred_handler(preds=preds, is_multiview_video=is_multiview)
 
     if output_pred_file is not None:
@@ -985,8 +996,7 @@ def predict_video(
 
         if isinstance(preds_df, dict):
             for view_name, df in preds_df.items():
-                # TODO Replace with something more robust.
-                df.to_csv(output_pred_file.replace(".csv", f"_{view_name}.csv"))
+                df.to_csv(output_pred_file[view_name])
         else:
             preds_df.to_csv(output_pred_file)
 
