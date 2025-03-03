@@ -1,12 +1,12 @@
 """Functions for predicting keypoints on labeled datasets and unlabeled videos."""
+from __future__ import annotations
 
 import datetime
 import gc
 import os
-import re
 import time
 from pathlib import Path
-from typing import Tuple, Type
+from typing import TYPE_CHECKING, Tuple, Type
 
 import cv2
 import lightning.pytorch as pl
@@ -23,9 +23,11 @@ from typeguard import typechecked
 from lightning_pose.data.dali import LitDaliWrapper, PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.utils import count_frames
-from lightning_pose.model import Model
 from lightning_pose.models import ALLOWED_MODELS
 from lightning_pose.utils import pretty_print_str
+
+if TYPE_CHECKING:
+    from lightning_pose.model import Model
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -942,16 +944,17 @@ def generate_labeled_video(
 def predict_video(
     video_file: str | list[str],
     model: Model,
-    output_pred_file: str | dict[str, str] | None = None,
+    output_pred_file: str | list[str] | None = None,
     image_resize_dims: DictConfig | None = None,
     dali_settings: DictConfig | None = None,
-) -> pd.DataFrame:
+) -> pd.DataFrame | list[pd.DataFrame]:
     """
     Args:
         video_file: Predict on a video, or for true multiview models, a list of videos
             (order: 1-1 correspondence with cfg.data.view_names).
         model: The model to predict with.
-        output_pred_file: (optional) File to save predictions in. For multiview, map from view_name to file.
+        output_pred_file: (optional) File to save predictions in. For multiview, a list of files (1-1 correspondance
+            to cfg.data.view_names).
         image_resize_dims: (optional) Overrides the config image_resize_dims.
         dali_settings: (optional) Overrides the config dali_settings.
     """
@@ -959,14 +962,20 @@ def predict_video(
     is_multiview = not isinstance(video_file, str)
 
     if is_multiview:
-        # Validate output_pred_file is a dict
-        if output_pred_file is not None and not isinstance(output_pred_file, dict):
-            raise ValueError("for multiview prediction, 'output_pred_file' should be a dict of view_name -> file")
+        # Validate output_pred_file is a list
+        if output_pred_file is not None and not isinstance(output_pred_file, list):
+            raise ValueError(
+                "for multiview prediction, 'output_pred_file' should be a list corresponding to view_names"
+            )
 
         # Sanity check 1-1 correspondence of video_file to cfg.data.view_names
         # (Important since PredictionHandler relies on the correspondence to organize the outputted dict).
-        for single_video_file, view_name in zip(video_file, model.config.cfg.data.view_names):
-            assert view_name in Path(single_video_file).stem, "expected video_file to correspond 1-1 with cfg.data.view_name"
+        for single_video_file, view_name in zip(
+            video_file, model.config.cfg.data.view_names
+        ):
+            assert (
+                view_name in Path(single_video_file).stem
+            ), "expected video_file to correspond 1-1 with cfg.data.view_name"
 
     trainer = pl.Trainer(accelerator="gpu", devices=1, logger=False)
     model_type = (
@@ -1006,13 +1015,18 @@ def predict_video(
 
     preds_df = pred_handler(preds=preds, is_multiview_video=is_multiview)
 
+    # Convert to a 1-1 correspondence list similar to video_files, for multiview.
+    if isinstance(preds_df, dict):
+        preds_df = [preds_df[view_name] for view_name in model.config.cfg.data.view_names]
+
     if output_pred_file is not None:
         # save the predictions to a csv; create directory if it doesn't exist
         os.makedirs(os.path.dirname(output_pred_file), exist_ok=True)
 
-        if isinstance(preds_df, dict):
-            for view_name, df in preds_df.items():
-                df.to_csv(output_pred_file[view_name])
+        if is_multiview:
+            assert isinstance(preds_df, dict)
+            for df, output_file in zip(preds_df, output_pred_file):
+                df.to_csv(output_file)
         else:
             preds_df.to_csv(output_pred_file)
 

@@ -272,11 +272,7 @@ class PrepareDALI(object):
         self.resize_dims = resize_dims
         self.dali_config = dali_config
         self.num_threads = num_threads
-        def _count_frames():
-            # in the multiview case, just count frames from one view
-            video_files: list[str] = filenames if not self.multiview else filenames[0]
-            return sum(map(count_frames, video_files))
-        self.frame_count = _count_frames()
+        self.frame_count = sum(map(count_frames, filenames[0]))
         self._pipe_dict: dict = self._setup_pipe_dict(self.filenames, imgaug)
 
     @property

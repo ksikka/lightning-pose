@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import re
 from pathlib import Path
 from typing import TypedDict
 
@@ -11,9 +12,13 @@ from lightning_pose.model_config import ModelConfig
 from lightning_pose.models import ALLOWED_MODELS
 from lightning_pose.utils.io import ckpt_path_from_base_path
 from lightning_pose.utils.predictions import (
+    generate_labeled_video as generate_labeled_video_fn,
+)
+from lightning_pose.utils.predictions import (
     export_predictions_and_labeled_video,
     load_model_from_checkpoint,
     predict_dataset,
+    predict_video,
 )
 
 from lightning_pose.utils.scripts import (
@@ -116,6 +121,10 @@ class Model:
         predictions: pd.DataFrame
         metrics: pd.DataFrame
 
+    class MultiPredictionResult(TypedDict):
+        predictions: dict[str, pd.DataFrame]
+        metrics: pd.DataFrame
+
     def predict_on_label_csv(
         self,
         csv_file: str | Path,
@@ -203,7 +212,6 @@ class Model:
 
         return self.PredictionResult(predictions=df)
 
-
     def predict_on_video_file(
         self,
         video_file: str | Path,
@@ -267,7 +275,6 @@ class Model:
 
         return self.PredictionResult(predictions=df)
 
-
     def predict_on_video_file_per_view(
         self,
         video_files: list[str] | list[Path],
@@ -277,6 +284,7 @@ class Model:
     ) -> PredictionResult:
         """Predicts on a list of video files, one per view.
         Use this for true multiview models (heatmap_multiview)."""
+        assert self.config.is_multi_view()
         self._load()
         video_files = [Path(f) for f in video_files]
 
@@ -289,13 +297,35 @@ class Model:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        prediction_csv_file = output_dir / f"{video_file.stem}.csv"
+        def _get_video_files_by_view():
+            video_files_by_view = {}
+            view_names = self.config.cfg.data.view_names
+            for view_name in view_names:
+                # Search all the video_files for a match.
+                for video_file in video_files:
+                    if re.match(rf"{video_file}", video_file.stem):
+                        if view_name not in video_files_by_view:
+                            video_files_by_view[view_name] = video_file
+                        else:
+                            raise ValueError(
+                                "File matches multiple views: " + video_file
+                            )
+                # After the search if nothing was added to dict, there is a problem.
+                if view_name not in video_files_by_view:
+                    raise ValueError("File not found for view: " + view_name)
 
-        labeled_mp4_file = None
-        if generate_labeled_video:
-            labeled_mp4_file = str(
-                self.labeled_videos_dir() / f"{video_file.stem}_labeled.mp4"
-            )
+            return video_files_by_view
+
+        # Arranges video_files to be in the same order as cfg.data.view_names.
+        video_files_by_view = _get_video_files_by_view()
+        video_files = [
+            video_files_by_view[view_name]
+            for view_name in self.config.cfg.data.view_names
+        ]
+
+        prediction_csv_file = [
+            str(output_dir / f"{video_file.stem}.csv") for video_file in video_files
+        ]
 
         if self.config.cfg.eval.get("predict_vids_after_training_save_heatmaps", False):
             raise NotImplementedError(
@@ -303,25 +333,35 @@ class Model:
                 "Set a flag on the model to return heatmaps. "
                 "Use trainer.predict instead of side-stepping it."
             )
-        df = export_predictions_and_labeled_video(
-            video_file=str(video_file),
-            cfg=self.config.cfg,
-            prediction_csv_file=str(prediction_csv_file),
-            labeled_mp4_file=labeled_mp4_file,
-            model=self.model,
+        df = predict_video(
+            video_file=list(map(str, video_files)),
+            model=self,
+            output_pred_file=prediction_csv_file,
         )
+        if generate_labeled_video:
+            for video_file, single_df in zip(video_files, df):
+                labeled_mp4_file = str(
+                    self.labeled_videos_dir() / f"{video_file.stem}_labeled.mp4"
+                )
+                generate_labeled_video_fn(
+                    video_file=video_file,
+                    preds_df=single_df,
+                    output_mp4_file=labeled_mp4_file,
+                    confidence_thresh_for_vid=self.cfg.eval.confidence_thresh_for_vid,
+                    colormap=self.cfg.eval.get("colormap", "cool"),
+                )
 
+        data_module = _build_datamodule_pred(self.cfg)
         if compute_metrics:
-            # FIXME: Data module is only used for computing PCA metrics.
-            data_module = _build_datamodule_pred(self.cfg)
-            compute_metrics_single(
-                cfg=self.cfg,
-                labels_file=None,
-                preds_file=str(prediction_csv_file),
-                data_module=data_module,
-            )
+            for preds_file in prediction_csv_file:
+                compute_metrics_single(
+                    cfg=self.cfg,
+                    labels_file=None,
+                    preds_file=preds_file,
+                    data_module=data_module,
+                )
 
-        return self.PredictionResult(predictions=df)
+        return self.MultiPredictionResult(predictions=df)
 
 
 def _build_datamodule_pred(cfg: DictConfig):
