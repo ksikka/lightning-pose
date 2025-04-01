@@ -1,0 +1,13 @@
+<div class="relative"><!-- wrapper to contain video + keypoints -->
+  <video
+    #videoEl
+    preload="auto"
+    (timeupdate)="onTimeUpdate()"
+    (loadedmetadata)="onLoadedMetadata()"
+    muted
+    class="w-full">
+    <source [src]="src()" type="video/mp4" />
+  </video>
+  <ng-content></ng-content>
+</div>
+<p>T: {{localCurrentTime()}}</p>

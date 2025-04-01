@@ -1,0 +1,37 @@
+<div class="divide-y">
+
+<div class="px-2 flex justify-between">
+  <h1>Sessions</h1>
+  <div><!-- right side of section -->
+    <div class="dropdown dropdown-end">
+      <button class="btn btn-xs btn-ghost">
+        <span class="material-icons text-base!">more_vert</span>
+      </button>
+      <ul tabindex="0" class="dropdown-content menu menu-sm bg-base-100 z-40 w-52 p-2 shadow-sm">
+        <li><a>Change grouping rule</a></li>
+      </ul>
+    </div>
+  </div>
+</div>
+<ul class="
+  w-fit
+  overflow-x-hidden
+  relative z-10
+  hover:overflow-x-visible hover:z-40
+  bg-base-100">
+@for (session of sessions; track session.key) {
+  <li class="text-nowrap w-full"
+      routerLinkActive="bg-sky-700">
+    <a class="
+        px-2
+        block
+        w-full h-full
+        hover:bg-sky-700
+      " routerLink="/viewer/{{ session.key }}">
+      {{ session.key }}
+    </a>
+  </li>
+}
+</ul>
+
+</div>

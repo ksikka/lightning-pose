@@ -1,0 +1,21 @@
+ <div class="video-controls-container">
+    <button class="btn" (click)="toggleIsPlaying()">
+      @if (isPlaying) {
+      <span class="material-icons">pause</span>
+      } @else {
+      <span class="material-icons">play_arrow</span>
+      }</button>
+    <span class="time-display w-10 overflow-hidden">{{currentTime}}</span>
+    <span class="time-display w-10">{{currentFrame}}</span>
+    <input
+        #rangeInput
+        type="range"
+        class="timestamp-slider"
+        min="0"
+        max="3"
+        [value]="currentTime"
+        (input)="onSliderInput(rangeInput.value)"
+        step=".0033333333"
+    />
+    <span class="time-display">3s</span>
+</div>

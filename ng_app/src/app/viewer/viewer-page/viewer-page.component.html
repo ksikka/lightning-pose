@@ -1,0 +1,24 @@
+<script src="viewer-page.component.ts"></script>
+<div class="fixed top-0 left-0
+            bg-base-100
+            h-screen w-screen
+            flex flex-row
+            items-stretch
+            ">
+  <!-- Left pane -->
+  <app-viewer-left-panel [selectedSession]="selectedSession()"
+     class="w-60 xl:w-80
+     h-full
+     shrink-0"></app-viewer-left-panel>
+
+  <!-- Center content -->
+  <app-viewer-center-panel
+    class="bg-base-300 grow z-30"
+    [viewSettings]="viewSettings"></app-viewer-center-panel>
+
+  <!-- Right pane -->
+  <div class="shrink-0 w-60 xl:w-80 p-2">
+    <p>Keypoint selection, view selection, are traces enabled?</p>
+    <app-view-settings [viewSettings]="viewSettings"></app-view-settings>
+  </div>
+</div>

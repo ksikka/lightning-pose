@@ -44,5 +44,6 @@ def main():
     command_handler(args)
 
 
-if __name__ == "__main__":
-    main()
+# No if __name__ == "__main__" guard:
+# https://github.com/zauberzeug/nicegui/issues/181#issuecomment-1328638810
+main()
