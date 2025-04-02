@@ -17,8 +17,8 @@ def register_parser(subparsers):
     app_parser.add_argument(
         "--port",
         type=int,
-        default=8000,
-        help="Port to run the app on. Default is 8000.",
+        default=8080,
+        help="Port to run the app on. Default is 8080.",
     )
     app_parser.add_argument(
         "--host",
@@ -31,7 +31,7 @@ def register_parser(subparsers):
 def handle(args):
     """Handle the app command."""
     # Set storage path before importing nicegui
-    os.environ["NICEGUI_STORAGE_PATH"] = os.path.expanduser("~/.lightning-pose")
+    os.environ["NICEGUI_STORAGE_PATH"] = os.path.expanduser("~/.litpose")
 
     # Import lightning_pose modules only when needed
     from app.main import run_app

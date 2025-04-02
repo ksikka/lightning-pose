@@ -41,22 +41,4 @@ def main():
 
 # No if __name__ == "__main__" guard:
 # https://github.com/zauberzeug/nicegui/issues/181#issuecomment-1328638810
-print("hello")
-import os
-import sys
-
-# Get the current process ID
-pid = os.getpid()
-
-# Get the list of command line arguments (sys.argv[0] is the script name)
-command_args = sys.argv
-
-# Join the arguments into a single string to represent the command
-command_str = ' '.join(command_args)
-
-# Print the PID
-print(f"PID: {pid}")
-
-# Print the command used to execute the script
-print(f"Command: {command_str}")
 main()
