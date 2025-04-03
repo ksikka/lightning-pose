@@ -45,6 +45,71 @@ class Models:
         ]
         self.build.refresh()
 
+    def _build_model_table(self):
+
+        columns = [
+            {'name': 'name', 'label': 'Name', 'align': 'left', "sortable": True, "field": "name"},
+            {'name': 'created', 'label': 'Created', "sortable": True, "field": "creation_timestamp_fmt"},
+            {'name': 'model_type', 'label': 'Model Type', "sortable": True, "field": "display_model_type"},
+        ]
+
+        # Make table wider and add debug info
+        table = ui.table(columns=columns, rows=self.models, row_key='name', selection='multiple').classes("w-full")
+
+        # Add custom header slot
+        table.add_slot(
+            "header",
+            r"""
+            <q-tr :props="props">
+                <q-th auto-width></q-th>
+                <q-th v-for="col in props.cols" :key="col.name" :props="props">
+                    {{ col.label }}
+                </q-th>
+            </q-tr>
+            """
+        )
+
+        # Add custom body slot with editable cells
+        table.add_slot(
+            "body",
+            r"""
+            <q-tr :props="props">
+                <q-td auto-width>
+                    <q-checkbox v-model="props.selected" val="props.row.name" />
+                </q-td>
+                <q-td key="name" :props="props">
+                    <div class="row items-center">
+                        {{ props.row.name }}
+                        <q-icon name="edit" class="q-ml-sm edit-icon" size="xs" />
+                    </div>
+                    <q-popup-edit v-model="props.row.name" v-slot="scope"
+                        @update:model-value="() => $parent.$emit('rename', props.row)">
+                        <q-input v-model="scope.value" dense autofocus counter @keyup.enter="scope.set" />
+                    </q-popup-edit>
+                </q-td>
+                <q-td key="created" :props="props">
+                    {{ props.row.creation_timestamp_fmt }}
+                </q-td>
+                <q-td key="model_type" :props="props">
+                    {{ props.row.display_model_type }}
+                </q-td>
+            </q-tr>
+            """
+        )
+
+        # Add CSS to show/hide the edit icon on hover
+        ui.add_css("""
+            .edit-icon {
+                opacity: 0;
+                transition: opacity 0.2s;
+            }
+            .q-tr:hover .edit-icon {
+                opacity: 1;
+            }
+        """)
+
+        table.on("rename", self.name_edit_callback)
+
     @ui.refreshable
     def build(self):
         if self.model_loading_state == LoadingState.IDLE:
@@ -59,63 +124,17 @@ class Models:
                 ui.button("New model", on_click=self.train_model)
             else:
                 ui.button("New model", on_click=self.train_model)
-
-                columns = [
-                    {'name': 'name', 'label': 'Name', 'align': 'left', "sortable": True, "field": "name"},
-                    {'name': 'created', 'label': 'Created', "sortable": True, "field": "creation_timestamp_fmt"},
-                    {'name': 'model_type', 'label': 'Model Type', "sortable": True, "field": "display_model_type"},
-                ]
-
-                # Make table wider and add debug info
-                table = ui.table(columns=columns, rows=self.models, row_key='name').classes("w-full")
-
-                # Add custom header slot
-                table.add_slot(
-                    "header",
-                    r"""
-                    <q-tr :props="props">
-                        <q-th v-for="col in props.cols" :key="col.name" :props="props">
-                            {{ col.label }}
-                        </q-th>
-                    </q-tr>
-                    """
-                )
-
-                # Add custom body slot with editable cells
-                table.add_slot(
-                    "body",
-                    r"""
-                    <q-tr :props="props">
-                        <q-td key="name" :props="props">
-                            <div class="row items-center">
-                                {{ props.row.name }}
-                                <q-icon name="edit" class="q-ml-sm edit-icon" size="xs" />
-                            </div>
-                            <q-popup-edit v-model="props.row.name" v-slot="scope"
-                                @update:model-value="() => $parent.$emit('rename', props.row)">
-                                <q-input v-model="scope.value" dense autofocus counter @keyup.enter="scope.set" />
-                            </q-popup-edit>
-                        </q-td>
-                        <q-td key="created" :props="props">
-                            {{ props.row.creation_timestamp_fmt }}
-                        </q-td>
-                        <q-td key="model_type" :props="props">
-                            {{ props.row.display_model_type }}
-                        </q-td>
-                    </q-tr>
-                    """
-                )
-
-                # Add CSS to show/hide the edit icon on hover
-                ui.add_css("""
-                    .edit-icon {
-                        opacity: 0;
-                        transition: opacity 0.2s;
-                    }
-                    .q-tr:hover .edit-icon {
-                        opacity: 1;
-                    }
-                """)
-
-                table.on("rename", self.name_edit_callback)
+                with ui.splitter() as splitter:
+                    with splitter.before:
+                        with ui.row():
+                            with ui.card().tight():
+                                with ui.expansion("Select models"):
+                                    self._build_model_table()
+                        with ui.row():
+                            with ui.card().tight():
+                                with ui.expansion("Select files to predict"):
+                                    ui.label("Hello")
+                    with splitter.after:
+                        with ui.card():
+                            ui.label("Summary here")
 
