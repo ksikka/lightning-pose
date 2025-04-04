@@ -6,12 +6,13 @@ os.environ["NICEGUI_STORAGE_PATH"] = os.path.expanduser("~/.lightning-pose")
 
 import logging
 
-from nicegui import ui, app
+from nicegui import ui, app, run, background_tasks
 
 from . import tab_one
 from . import tabs
 from .tabmanager import TabManager
 from . import config
+from .services.job_manager import JobManager
 
 
 
@@ -55,6 +56,7 @@ def main():
     tab_manager = TabManager()
     tab_manager.add_tab("/p/home", tabs.home.Home())
     tab_manager.add_tab("/p/models", tabs.models.Models())
+    tab_manager.add_tab("/p/jobs", tabs.jobs.Jobs())
     tab_manager.add_tab("/p/faketab", tab_one.TabOne("/p/models"))
 
     # adding some navigation buttons to switch between the different pages
@@ -63,6 +65,7 @@ def main():
         # replace= removes the default .nicegui-link which made the link blue and underlined.
         ui.link("Home", "/p/home").classes(replace="text-lg text-white soft-link")
         ui.link("Models", "/p/models").classes(replace="text-lg text-white soft-link")
+        ui.link("Jobs", "/p/jobs").classes(replace="text-lg text-white soft-link")
         ui.link("TestTab", "/p/faketab").classes(replace="text-lg text-white soft-link")
 
     # this places the content which should be displayed
@@ -70,6 +73,16 @@ def main():
 
 
 app.on_startup(lambda: print('Lightning Pose App running:', next(iter(app.urls))))
+
+
+def start_tensorboard():
+    """Start TensorBoard as a managed job."""
+    job_manager = JobManager()
+    job_manager.start_job("tensorboard", "tensorboard --logdir /home/ksikka/synced/outputs")
+    print("TensorBoard started as a managed job")
+
+
+app.on_startup(lambda: background_tasks.create(run.io_bound(start_tensorboard)))
 
 
 
