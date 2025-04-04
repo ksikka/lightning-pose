@@ -57,6 +57,7 @@ def main():
     tab_manager.add_tab("/p/home", tabs.home.Home())
     tab_manager.add_tab("/p/models", tabs.models.Models())
     tab_manager.add_tab("/p/jobs", tabs.jobs.Jobs())
+    tab_manager.add_tab("/p/tensorboard", tabs.tensorboard.TensorBoard())
     tab_manager.add_tab("/p/faketab", tab_one.TabOne("/p/models"))
 
     # adding some navigation buttons to switch between the different pages
@@ -66,6 +67,7 @@ def main():
         ui.link("Home", "/p/home").classes(replace="text-lg text-white soft-link")
         ui.link("Models", "/p/models").classes(replace="text-lg text-white soft-link")
         ui.link("Jobs", "/p/jobs").classes(replace="text-lg text-white soft-link")
+        ui.link("TensorBoard", "/p/tensorboard").classes(replace="text-lg text-white soft-link")
         ui.link("TestTab", "/p/faketab").classes(replace="text-lg text-white soft-link")
 
     # this places the content which should be displayed
@@ -78,7 +80,7 @@ app.on_startup(lambda: print('Lightning Pose App running:', next(iter(app.urls))
 def start_tensorboard():
     """Start TensorBoard as a managed job."""
     job_manager = JobManager()
-    job_manager.start_job("tensorboard", "tensorboard --logdir /home/ksikka/synced/outputs")
+    job_manager.start_job("tensorboard", "tensorboard --logdir /home/ksikka/synced/outputs --port 6007")
     print("TensorBoard started as a managed job")
 
 
