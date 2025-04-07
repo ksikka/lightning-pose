@@ -8,7 +8,7 @@ import os
 from nicegui import events, ui
 
 
-class local_file_picker(ui.dialog):
+class local_file_picker_dialog(ui.dialog):
 
     def __init__(
         self,

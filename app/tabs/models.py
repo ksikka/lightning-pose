@@ -9,11 +9,13 @@ from nicegui import ui, background_tasks, events
 # Set up logging
 logger = logging.getLogger(__name__)
 
+
 class LoadingState(enum.Enum):
     IDLE = 0
     LOADING = 1
     COMPLETED = 2
     FAILED = 3
+
 
 class Models:
     def __init__(self) -> None:
@@ -34,27 +36,47 @@ class Models:
 
     async def name_edit_callback(self, e: events.GenericEventArguments) -> None:
         print("Hello")  # Placeholder for future implementation
-        self.build.refresh()
+        self._build_model_table.refresh()
 
     async def train_model(self):
         await asyncio.sleep(1)
         self.models = [
-            {'name': 'Alice', 'created': 18},
-            {'name': 'Bob', 'created': 21},
-            {'name': 'Carol'},
+            {"name": "Alice", "created": 18},
+            {"name": "Bob", "created": 21},
+            {"name": "Carol"},
         ]
-        self.build.refresh()
+        self._build_model_table.refresh()
 
+    @ui.refreshable
     def _build_model_table(self):
 
         columns = [
-            {'name': 'name', 'label': 'Name', 'align': 'left', "sortable": True, "field": "name"},
-            {'name': 'created', 'label': 'Created', "sortable": True, "field": "creation_timestamp_fmt"},
-            {'name': 'model_type', 'label': 'Model Type', "sortable": True, "field": "display_model_type"},
+            {
+                "name": "name",
+                "label": "Name",
+                "align": "left",
+                "sortable": True,
+                "field": "name",
+            },
+            {
+                "name": "model_type",
+                "label": "Model Type",
+                "sortable": True,
+                "field": "display_model_type",
+            },
+            {
+                "name": "created",
+                "label": "Created",
+                "sortable": True,
+                "field": "creation_timestamp_fmt",
+            },
         ]
 
         # Make table wider and add debug info
-        table = ui.table(columns=columns, rows=self.models, row_key='name', selection='multiple').classes("w-full")
+        ui.table.default_props(add="dense")
+        table = ui.table(
+            columns=columns, rows=self.models, row_key="name", selection="multiple"
+        ).classes("w-full")
 
         # Add custom header slot
         table.add_slot(
@@ -66,7 +88,7 @@ class Models:
                     {{ col.label }}
                 </q-th>
             </q-tr>
-            """
+            """,
         )
 
         # Add custom body slot with editable cells
@@ -75,11 +97,13 @@ class Models:
             r"""
             <q-tr :props="props">
                 <q-td auto-width>
-                    <q-checkbox v-model="props.selected" val="props.row.name" />
+                    <q-checkbox dense v-model="props.selected" val="props.row.name" />
                 </q-td>
                 <q-td key="name" :props="props">
                     <div class="row items-center">
-                        {{ props.row.name }}
+                        <a :href="'/p/model/' + props.row.name.replaceAll('/', ':')" class="text-primary">
+                            {{ props.row.name }}
+                        </a>
                         <q-icon name="edit" class="q-ml-sm edit-icon" size="xs" />
                     </div>
                     <q-popup-edit v-model="props.row.name" v-slot="scope"
@@ -87,18 +111,19 @@ class Models:
                         <q-input v-model="scope.value" dense autofocus counter @keyup.enter="scope.set" />
                     </q-popup-edit>
                 </q-td>
-                <q-td key="created" :props="props">
-                    {{ props.row.creation_timestamp_fmt }}
-                </q-td>
                 <q-td key="model_type" :props="props">
                     {{ props.row.display_model_type }}
                 </q-td>
+                <q-td key="created" :props="props">
+                    {{ props.row.creation_timestamp_fmt }}
+                </q-td>
             </q-tr>
-            """
+            """,
         )
 
         # Add CSS to show/hide the edit icon on hover
-        ui.add_css("""
+        ui.add_css(
+            """
             .edit-icon {
                 opacity: 0;
                 transition: opacity 0.2s;
@@ -106,15 +131,14 @@ class Models:
             .q-tr:hover .edit-icon {
                 opacity: 1;
             }
-        """)
+        """
+        )
 
         table.on("rename", self.name_edit_callback)
 
     @ui.refreshable
     def build(self):
         if self.model_loading_state == LoadingState.IDLE:
-            # Start loading models
-            self.model_loading_state = LoadingState.LOADING
             background_tasks.create(self.load_models())
         elif self.model_loading_state == LoadingState.LOADING:
             ui.label("Loading...")
@@ -137,4 +161,3 @@ class Models:
                     with splitter.after:
                         with ui.card():
                             ui.label("Summary here")
-
