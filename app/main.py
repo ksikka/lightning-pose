@@ -92,6 +92,7 @@ def main():
     # Create tab manager
     tab_manager = TabManager()
     tab_manager.add_tab("/p/home", tabs.home.Home())
+    tab_manager.add_tab("/p/models", tabs.models.Models())
     tab_manager.add_pattern_tab(
         "/p/model/:model_name", lambda model_name: ModelDetails(model_name)
     )
