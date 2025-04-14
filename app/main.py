@@ -19,7 +19,7 @@ from .tabs.models import Models
 from .tabs.model_details import ModelDetails
 
 # Set up logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
