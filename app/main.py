@@ -17,6 +17,7 @@ from . import config
 from .services.job_manager import JobManager
 from .tabs.models import Models
 from .tabs.model_details import ModelDetails
+from .tabs.settings import Settings
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -24,22 +25,31 @@ logger = logging.getLogger(__name__)
 
 
 def _build_header():
-    with ui.header():
-        # ui.image("img/LightningPose_horizontal_light.webp")
-        # replace= removes the default .nicegui-link which made the link blue and underlined.
-        ui.link("Home", "/p/home").classes(replace="text-lg text-white soft-link")
-        ui.link("Models", "/p/models").classes(
-            replace="text-lg text-white soft-link active"
-        )
-        ui.link("Tensorboard", "/p/faketab").classes(
-            replace="text-lg text-white soft-link"
-        )
-        ui.link("File Browser", "/p/faketab").classes(
-            replace="text-lg text-white soft-link"
-        )
-        ui.link("Labeling", "/p/faketab").classes(
-            replace="text-lg text-white soft-link"
-        )
+    # justify-between maximizes space between the children,
+    # so first div goes on the left, second div on the right.
+    with ui.header().classes("justify-between no-wrap"):
+        with ui.row():
+            # ui.image("img/LightningPose_horizontal_light.webp")
+            # replace= removes the default .nicegui-link which made the link blue and underlined.
+            ui.link("Home", "/p/home").classes(replace="text-lg text-white soft-link")
+            ui.link("Models", "/p/models").classes(
+                replace="text-lg text-white soft-link active"
+            )
+            ui.link("Tensorboard", "/p/faketab").classes(
+                replace="text-lg text-white soft-link"
+            )
+            ui.link("File Browser", "/p/faketab").classes(
+                replace="text-lg text-white soft-link"
+            )
+            ui.link("Labeling", "/p/faketab").classes(
+                replace="text-lg text-white soft-link"
+            )
+        with ui.element("div"):
+            with ui.link(target="/p/settings").classes(
+                replace="text-lg text-white soft-link flex items-center gap-1"
+            ):
+                ui.icon("settings").classes("text-xl")
+                ui.label("Settings")
 
 
 # Root and all pages will return the "single-page-app".
@@ -100,6 +110,7 @@ def main():
     tab_manager.add_tab("/p/tensorboard", tabs.tensorboard.TensorBoard())
     tab_manager.add_tab("/p/faketab", tab_one.TabOne("/p/models"))
 
+    tab_manager.add_tab("/p/settings", tabs.settings.Settings())
     _build_header()
 
     # this places the content which should be displayed
