@@ -3,8 +3,6 @@ import logging
 from pathlib import Path
 from typing import List, Optional
 
-import asyncio
-import multiprocessing
 from nicegui import ui, background_tasks, run
 from .. import config
 from ..components.file_picker import FilePicker
@@ -60,10 +58,10 @@ class ModelDetails:
     
     async def load_videos_list(self):
         """Load the videos list."""
+        self.videos_list_loaded = True
         # Find the model in the list
         self.videos_list = await self.data_dao.videos_list()
 
-        self.videos_list_loaded = True
 
         self.build_prediction_section.refresh()
 

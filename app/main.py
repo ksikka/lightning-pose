@@ -129,7 +129,12 @@ def start_tensorboard():
     print("TensorBoard started as a managed job")
 
 
-app.on_startup(lambda: background_tasks.create(run.io_bound(start_tensorboard)))
+debug = False
+def _start_tensorboard():
+    # Don't start tensorboard if running dev server from 'python -m app.main'
+    if not debug:
+        background_tasks.create(run.io_bound(start_tensorboard))
+app.on_startup(_start_tensorboard)
 
 
 def run_app(
@@ -137,6 +142,8 @@ def run_app(
     port=8080,
     reload=False,
 ):
+    global debug
+    debug=True
     ui.run(
         host=host,
         port=port,

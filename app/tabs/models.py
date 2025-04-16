@@ -4,7 +4,7 @@ import logging
 
 from .. import config
 from ..dao.model import Model
-from nicegui import ui, background_tasks, events
+from nicegui import ui, background_tasks, events, binding
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -15,6 +15,48 @@ class LoadingState(enum.Enum):
     LOADING = 1
     COMPLETED = 2
     FAILED = 3
+
+
+@binding.bindable_dataclass
+class ModelFormData:
+    """Data structure to hold form values."""
+    model_type: str = "supervised"  # Default model type
+    loss: str = "pca"  # Default loss
+
+class new_model_dialog(ui.dialog):
+
+    def __init__(
+        self,
+    ) -> None:
+        """new_model_dialog
+        """
+        super().__init__()
+        self.data = ModelFormData()
+
+
+        with self, ui.card():
+            with ui.row():
+                ui.label("Model Type:").classes("font-semibold")
+                ui.radio(
+                    options=["supervised", "unsupervised"],
+                ).bind_value(self.data, "model_type").props("inline")
+
+            # Losses to use selection (bind directly to self.data.loss)
+            with ui.row():
+                ui.label("Losses to Use:").classes("font-semibold")
+                ui.radio(
+                    options=["pca", "temporal"],
+                ).bind_value(self.data, "loss").props("inline")
+
+            # Action buttons (Save or Cancel)
+            with ui.row().classes("justify-end mt-4"):
+                ui.button("Create", on_click=self._handle_create).props("unelevated icon=check")
+                ui.button("Cancel", on_click=self.close).props("unelevated icon=close")
+
+    def _handle_create(self):
+        """Handle the create button click and submit the model data."""
+        self.submit(self.data)
+
 
 
 class Models:
@@ -46,6 +88,11 @@ class Models:
             {"name": "Carol"},
         ]
         self._build_model_table.refresh()
+
+    async def _new_model_flow(self):
+        x = await new_model_dialog()
+        if x is not None:
+            background_tasks.create(self.load_models())
 
     @ui.refreshable
     def _build_model_table(self):
@@ -145,9 +192,9 @@ class Models:
         elif self.model_loading_state == LoadingState.COMPLETED:
             if len(self.models) == 0:
                 ui.label(f"No models found in {config.model_dir}.")
-                ui.button("New model", on_click=self.train_model)
+                ui.button("New model", on_click=self._new_model_flow)
             else:
-                ui.button("New model", on_click=self.train_model)
+                ui.button("New model", on_click=self._new_model_flow)
                 with ui.splitter() as splitter:
                     with splitter.before:
                         with ui.row():
