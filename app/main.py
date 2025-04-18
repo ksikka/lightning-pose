@@ -153,6 +153,7 @@ def run_app(
         title="Lightning Pose",
         favicon=config.app_root / "img/favicon.ico",
         show_welcome_message=False,
+        uvicorn_reload_includes="*.py,*.vue", # include vue files
     )
 
 

@@ -2,6 +2,8 @@ import asyncio
 import enum
 import logging
 
+from nicegui.element import Element
+
 from .. import config
 from ..dao.model import Model
 from nicegui import ui, background_tasks, events, binding
@@ -17,6 +19,21 @@ class LoadingState(enum.Enum):
     FAILED = 3
 
 
+class ModelCreationForm(Element, component='../components/model_creation_form.vue'):
+    def __init__(self):
+        super().__init__()
+        self.on('submit', self.handle_submit)
+        self.on('cancel', self.handle_cancel)
+
+    def handle_submit(self, data):
+        print("great success")
+        self._props["isDialogOpen"] = False
+        self.update()
+
+    def handle_cancel(self):
+        self._props["isDialogOpen"] = False
+        self.update()
+
 @binding.bindable_dataclass
 class ModelFormData:
     """Data structure to hold form values."""
@@ -31,22 +48,38 @@ class new_model_dialog(ui.dialog):
         """new_model_dialog
         """
         super().__init__()
-        self.data = ModelFormData()
 
 
+        """
         with self, ui.card():
             with ui.row():
-                ui.label("Model Type:").classes("font-semibold")
+                ui.label("Model Type").classes("font-semibold")
+            with ui.row():
+                with ui.list().props('tag="label" v-ripple'):
+                    with ui.item().props('tag="label" v-ripple'):
+                        with ui.item_section().props("avatar"):
+                            ui.radio().props('val="supervised"').bind_value(self.data, "model_type")
+                        with ui.item_section():
+                            ui.item_label('Supervised')
+                            ui.item_label('A good starting point to establish baseline performance.').props('caption')
+                    with ui.item().props('tag="label" v-ripple'):
+                        with ui.item_section().props("avatar"):
+                            ui.radio().props('val="context"').bind_value(self.data, "model_type")
+                        with ui.item_section():
+                            ui.item_label('Context')
+                            ui.item_label('Fancy model that may perform better but more GPU-intensive.').props('caption')
+
+            with ui.row():
                 ui.radio(
-                    options=["supervised", "unsupervised"],
-                ).bind_value(self.data, "model_type").props("inline")
+                    options=["Supervised", "Context", "Unsupervised", "Unsupervised context"],
+                ).bind_value(self.data, "model_type")
 
             # Losses to use selection (bind directly to self.data.loss)
             with ui.row():
                 ui.label("Losses to Use:").classes("font-semibold")
                 ui.radio(
                     options=["pca", "temporal"],
-                ).bind_value(self.data, "loss").props("inline")
+                ).bind_value(self.data, "loss")
 
             # Action buttons (Save or Cancel)
             with ui.row().classes("justify-end mt-4"):
@@ -54,9 +87,8 @@ class new_model_dialog(ui.dialog):
                 ui.button("Cancel", on_click=self.close).props("unelevated icon=close")
 
     def _handle_create(self):
-        """Handle the create button click and submit the model data."""
         self.submit(self.data)
-
+"""
 
 
 class Models:
@@ -90,9 +122,14 @@ class Models:
         self._build_model_table.refresh()
 
     async def _new_model_flow(self):
-        x = await new_model_dialog()
-        if x is not None:
-            background_tasks.create(self.load_models())
+        #x = await new_model_dialog()
+        self.data = ModelFormData()
+
+        f = ModelCreationForm()
+        f.props["modelData"] = self.data
+        f.props["isDialogOpen"] = True
+        #if x is not None:
+        #    background_tasks.create(self.load_models())
 
     @ui.refreshable
     def _build_model_table(self):
