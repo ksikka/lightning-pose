@@ -1,8 +1,6 @@
 """Predict command for the lightning-pose CLI."""
 from __future__ import annotations
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import TYPE_CHECKING
 

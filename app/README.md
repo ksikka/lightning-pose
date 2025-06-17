@@ -15,10 +15,11 @@ The modules will also be developed in roughly that order.
 
 1. Install the server bundle `pip install lightning-pose[app]`
 2. Create a config file at `~/.lightning-pose/project.toml`
-```toml filename="project.toml"
-data_dir =... # Path to a directory containing all the data (videos, labels, etc).
-model_dir =... # Path to a directory containing all the models.
-views = ["", ...] # Names of the camera views.
+```toml
+# Create a file at ~/.lightning-pose/project.toml with the following fields.
+data_dir = "/Path to a directory containing all the data (videos, labels, etc)."
+model_dir = "/Path to a directory containing all the models."
+views = ["Names of your camera views, i.e. if your videos are like session1_top.mp4 then write:", "top"]
 ```
 3. Run the app: `litpose app`
 4. The webserver is now listening at `http://localhost:8080`!
