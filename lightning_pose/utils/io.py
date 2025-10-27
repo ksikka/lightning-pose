@@ -1,4 +1,7 @@
-"""Path handling functions."""
+"""
+Path manipulation functions. Note: functions that resolve keys to paths in
+the project directory should instead go in :mod:`lightning_pose.utils.paths`
+"""
 from __future__ import annotations  # python 3.8 compatibility for sphinx
 
 import os

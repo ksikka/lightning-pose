@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TypedDict, Union
 
 import pandas as pd
 import torch
 from nvidia.dali.plugin.pytorch import DALIGenericIterator
 from torchtyping import TensorType
+import pydantic
 
 # to ignore imports for sphix-autoapidoc
 __all__ = [
@@ -25,6 +27,18 @@ __all__ = [
     "SemiSupervisedHeatmapBatchDict",
     "SemiSupervisedDataLoaderDict",
 ]
+
+
+
+class Project(pydantic.BaseModel):
+    """Class to the project config"""
+
+    base_dir: Path = None
+    views: list[str] = []
+    keypoint_names: list[str] = []
+    schema_version: int = 0
+
+
 
 
 @dataclass
@@ -215,3 +229,4 @@ class SemiSupervisedDataLoaderDict(TypedDict):
 
     labeled: torch.utils.data.DataLoader
     unlabeled: DALIGenericIterator
+
