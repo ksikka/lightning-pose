@@ -25,21 +25,15 @@ class BaseDataModule(pl.LightningDataModule):
 
     def __init__(
         self,
-        dataset: torch.utils.data.Dataset,
-        splits: tuple[Subset, Subset, Subset],
-        dataloader_factory: Callable[[str], DataLoader]
+        dataloader_factory: Callable[[str], DataLoader],
     ) -> None:
         """Data module that uses an injected dataloader factory.
 
         Args:
-            dataset: base dataset corresponding to provided splits
-            splits: tuple of (train_subset, val_subset, test_subset)
             dataloader_factory: function mapping a stage string ("train"|"val"|"test")
                 to a configured DataLoader for the corresponding split
         """
         super().__init__()
-        self.dataset = dataset
-        self.train_dataset, self.val_dataset, self.test_dataset = splits
         self._get_dataloader = dataloader_factory
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
@@ -61,8 +55,8 @@ class UnlabeledDataModule(BaseDataModule):
 
     def __init__(
         self,
-        dataset: torch.utils.data.Dataset,
-        splits: tuple[Subset, Subset, Subset],
+        do_context: bool,
+        image_resize_dims: tuple[int, int],
         dataloader_factory: Callable[[str], DataLoader],
         video_paths_list: list[str] | str,
         dali_config: dict | DictConfig,
@@ -81,13 +75,15 @@ class UnlabeledDataModule(BaseDataModule):
 
         """
         super().__init__(
-            dataset=dataset,
-            splits=splits,
             dataloader_factory=dataloader_factory,
         )
+        self.do_context = do_context
+        self.image_resize_dims = image_resize_dims
         self.video_paths_list = video_paths_list
         self.filenames = check_video_paths(self.video_paths_list, view_names=view_names)
-        self.num_workers_for_unlabeled = 1  # WARNING!! do not increase above 1, weird behavior
+        self.num_workers_for_unlabeled = (
+            1  # WARNING!! do not increase above 1, weird behavior
+        )
         self.dali_config = dali_config
         self.unlabeled_dataloader = None  # initialized in setup_unlabeled
         self.imgaug = imgaug
@@ -97,9 +93,9 @@ class UnlabeledDataModule(BaseDataModule):
         """Sets up the unlabeled data loader."""
         dali_prep = PrepareDALI(
             train_stage="train",
-            model_type="context" if self.dataset.do_context else "base",
+            model_type="context" if self.do_context else "base",
             filenames=self.filenames,
-            resize_dims=[self.dataset.height, self.dataset.width],
+            resize_dims=list(self.image_resize_dims),
             dali_config=self.dali_config,
             imgaug=self.imgaug,
             num_threads=self.num_workers_for_unlabeled,

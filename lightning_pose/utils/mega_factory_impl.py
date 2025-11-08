@@ -54,56 +54,44 @@ class ModelComponentContainerImpl(Protocol):
     def get_imgaug_transform(self) -> iaa.Sequential:
         return scripts.get_imgaug_transform(cfg=self.cfg)
 
-    @cached
-    def get_dataset(self) -> torch.utils.data.Dataset:
+    def get_dataset_builder(
+        self,
+    ) -> Callable[[str | None, bool], torch.utils.data.Dataset]:
         imgaug_transform = self.get_imgaug_transform()
-        return scripts.get_dataset(
+        return scripts.get_dataset_builder(
             cfg=self.cfg,
-            data_dir=self.cfg.data.data_dir,
             imgaug_transform=imgaug_transform,
         )
 
-    @cached
-    def get_split_datasets(self) -> tuple[Subset, Subset, Subset]:
-        dataset = self.get_dataset()
-        return scripts.get_split_datasets(cfg=self.cfg, dataset=dataset)
-
-    @cached
     def get_dataloader_factory(self) -> Callable[[str], torch.utils.data.DataLoader]:
         """stage -> dataloader"""
-        splits = self.get_split_datasets()
-        return scripts.get_dataloader_factory(cfg=self.cfg, splits=splits)
+        dataset_builder = self.get_dataset_builder()
+        return scripts.get_dataloader_factory(
+            cfg=self.cfg, dataset_builder=dataset_builder
+        )
 
-    @cached
     def get_predict_dali_dataloader_factory(
         self,
     ) -> Callable[[str], torch.utils.data.DataLoader]:
         """filename -> predict dataloader"""
         ...
 
-    @cached
     def get_combined_dataloader_factory(
         self,
     ) -> Callable[[Subset], torch.utils.data.DataLoader]: ...
 
-    @cached
     def get_data_module(self) -> pl.LightningDataModule:
-        dataset = self.get_dataset()
-        # Build splits and labeled dataloader factory, then construct data module
-        splits = scripts.get_split_datasets(cfg=self.cfg, dataset=dataset)
-        dataloader_factory = scripts.get_dataloader_factory(
-            cfg=self.cfg, dataset=dataset, splits=splits
-        )
+        dataloader_factory = self.get_dataloader_factory()
         return scripts.get_data_module(
-            cfg=self.cfg, dataset=dataset, dataloader_factory=dataloader_factory
+            cfg=self.cfg,
+            dataset=self.get_dataset_builder,
+            dataloader_factory=dataloader_factory,
         )
 
-    @cached
     def get_loss_factories(self) -> dict[str, LossFactory | None]:
         data_module = self.get_data_module()
         return scripts.get_loss_factories(cfg=self.cfg, data_module=data_module)
 
-    @cached
     def get_model(self) -> HeatmapTracker:
         data_module = self.get_data_module()
         loss_factories = self.get_loss_factories()

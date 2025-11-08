@@ -10,7 +10,9 @@ from lightning_pose.api.model_config import ModelConfig
 from lightning_pose.data.datatypes import MultiviewPredictionResult, PredictionResult
 from lightning_pose.models import ALLOWED_MODELS
 from lightning_pose.utils import io as io_utils
-from lightning_pose.utils.predictions import generate_labeled_video as generate_labeled_video_fn
+from lightning_pose.utils.predictions import (
+    generate_labeled_video as generate_labeled_video_fn,
+)
 from lightning_pose.utils.predictions import (
     load_model_from_checkpoint,
     predict_dataset,
@@ -161,10 +163,6 @@ class Model:
             }
         }
 
-        # Avoid annotating set=train/val/test for CSV file other than the training CSV file.
-        if not add_train_val_test_set:
-            cfg_overrides.update({"train_prob": 1, "val_prob": 0, "train_frames": 1})
-
         cfg_pred = OmegaConf.merge(self.cfg, cfg_overrides)
 
         # HACK: For true multi-view model, trick predict_dataset and compute_metrics
@@ -181,7 +179,11 @@ class Model:
         preds_file = str(preds_file_path)
 
         df = predict_dataset(
-            cfg_pred, data_module_pred, model=self.model, preds_file=preds_file
+            cfg_pred,
+            data_module_pred,
+            model=self.model,
+            preds_file=preds_file,
+            add_train_val_test_set=add_train_val_test_set,
         )
 
         if compute_metrics:

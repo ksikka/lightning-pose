@@ -17,13 +17,17 @@ import pandas as pd
 import torch
 from moviepy import VideoFileClip
 from omegaconf import DictConfig, OmegaConf
+from torch.utils.data import DataLoader
 from torchtyping import TensorType
 from typeguard import typechecked
 
 from lightning_pose.data.dali import PrepareDALI
 from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
+from lightning_pose.data.datasets import BaseTrackingDataset
 from lightning_pose.data.utils import count_frames
 from lightning_pose.models import ALLOWED_MODELS
+from lightning_pose.utils.mega_factory_impl import ModelComponentContainerImpl
+from lightning_pose.utils.scripts import get_orig_split_indices
 
 if TYPE_CHECKING:
     from lightning_pose.api.model import Model
@@ -61,25 +65,26 @@ class PredictionHandler:
     def __init__(
         self,
         cfg: DictConfig,
-        data_module: pl.LightningDataModule | None = None,
+        dataset: BaseTrackingDataset | None = None,
         video_file: str | None = None,
+        add_train_val_test_set: bool = False,
     ) -> None:
         """
 
         Args
             cfg
-            data_module: Only required for prediction of CSV files.
+            dataset: Only required for prediction of CSV files.
             video_file: For prediction on video, path to the video file.
                 Used to get frame_count.
         """
-        if data_module is None and video_file is None:
-            raise ValueError("must pass either data_module or video_file")
+        if dataset is None and video_file is None:
+            raise ValueError("must pass either dataset or video_file")
 
         if cfg.data.get("keypoint_names", None) is None:
             raise ValueError("must include `keypoint_names` field in cfg.data")
 
         self.cfg = cfg
-        self.data_module = data_module
+        self.dataset = dataset
         self.video_file = video_file
 
     @property
@@ -88,7 +93,7 @@ class PredictionHandler:
         if self.video_file is not None:
             return count_frames(self.video_file)
         else:
-            return len(self.data_module.dataset)
+            return len(self.dataset)
 
     @property
     def keypoint_names(self):
@@ -96,10 +101,7 @@ class PredictionHandler:
 
     @property
     def do_context(self):
-        if self.data_module:
-            return self.data_module.dataset.do_context
-        else:
-            return self.cfg.model.model_type == "heatmap_mhcrnn"
+        return self.cfg.model.model_type == "heatmap_mhcrnn"
 
     def unpack_preds(
         self,
@@ -161,7 +163,9 @@ class PredictionHandler:
         of images[-2] and images[-3]
         """
         # first pad the first two rows for which we have no valid preds.
-        preds_1 = torch.tile(stacked_preds[0], (2, 1))  # copying twice the prediction for image[2]
+        preds_1 = torch.tile(
+            stacked_preds[0], (2, 1)
+        )  # copying twice the prediction for image[2]
         preds_2 = stacked_preds[0:-2]  # throw out the last two rows.
         preds_combined = torch.vstack([preds_1, preds_2])
         # repat the last one twice
@@ -212,7 +216,9 @@ class PredictionHandler:
 
         return predictions
 
-    def make_dlc_pandas_index(self, keypoint_names: list | None = None) -> pd.MultiIndex:
+    def make_dlc_pandas_index(
+        self, keypoint_names: list | None = None
+    ) -> pd.MultiIndex:
         return make_dlc_pandas_index(
             cfg=self.cfg, keypoint_names=keypoint_names or self.keypoint_names
         )
@@ -221,10 +227,13 @@ class PredictionHandler:
         """Add split indices to the dataframe."""
         df["set"] = np.array(["unused"] * df.shape[0])
 
+        train_idx, val_idx, test_idx = get_orig_split_indices(
+            self.cfg, len(self.dataset)
+        )
         dataset_split_indices = {
-            "train": self.data_module.train_dataset.indices,
-            "validation": self.data_module.val_dataset.indices,
-            "test": self.data_module.test_dataset.indices,
+            "train": train_idx,
+            "validation": val_idx,
+            "test": test_idx,
         }
 
         for key, val in dataset_split_indices.items():
@@ -268,18 +277,19 @@ class PredictionHandler:
             for view_idx, view_name in enumerate(self.cfg.data.view_names):
                 idx_beg = view_idx * num_keypoints
                 idx_end = idx_beg + num_keypoints
-                stacked_preds_single = stacked_preds[:, idx_beg * 2:idx_end * 2]
+                stacked_preds_single = stacked_preds[:, idx_beg * 2 : idx_end * 2]
                 stacked_confs_single = stacked_confs[:, idx_beg:idx_end]
                 pred_arr = self.make_pred_arr_undo_resize(
-                    stacked_preds_single.cpu().numpy(), stacked_confs_single.cpu().numpy()
+                    stacked_preds_single.cpu().numpy(),
+                    stacked_confs_single.cpu().numpy(),
                 )
                 pdindex = self.make_dlc_pandas_index(self.keypoint_names)
                 df = pd.DataFrame(pred_arr, columns=pdindex)
                 view_to_df[view_name] = df
-                if self.video_file is None:
+                if self.video_file is None and self.add_split_indices_to_df:
                     # specify which image is train/test/val/unused
                     df = self.add_split_indices_to_df(df)
-                    df.index = self.data_module.dataset.dataset[view_name].image_names
+                    df.index = self.dataset.dataset[view_name].image_names
             retval = view_to_df
         else:
             pred_arr = self.make_pred_arr_undo_resize(
@@ -287,10 +297,10 @@ class PredictionHandler:
             )
             pdindex = self.make_dlc_pandas_index()
             df = pd.DataFrame(pred_arr, columns=pdindex)
-            if self.video_file is None:
+            if self.video_file is None and self.add_split_indices_to_df:
                 # specify which image is train/test/val/unused
                 df = self.add_split_indices_to_df(df)
-                df.index = self.data_module.dataset.image_names
+                df.index = self.dataset.image_names
             retval = df
 
         return retval
@@ -299,11 +309,12 @@ class PredictionHandler:
 @typechecked
 def predict_dataset(
     cfg: DictConfig,
-    data_module: BaseDataModule,
+    dataset: BaseTrackingDataset,
+    dataloader: DataLoader,
     preds_file: str | list[str],
-    ckpt_file: str | None = None,
     trainer: pl.Trainer | None = None,
     model: ALLOWED_MODELS | None = None,
+    add_train_val_test_set: bool = False,
 ) -> pd.DataFrame | dict[str, pd.DataFrame]:
     """Save predicted keypoints for a labeled dataset.
 
@@ -311,7 +322,6 @@ def predict_dataset(
         cfg: hydra config
         data_module: data module that contains dataloaders for train, val, test splits
         preds_file: path for the predictions .csv file
-        ckpt_file: absolute path to the checkpoint of your trained model; requires .ckpt suffix
         trainer: pl.Trainer object
         model: Lightning Module
 
@@ -320,12 +330,8 @@ def predict_dataset(
 
     """
 
-    delete_model = False
     if model is None:
-        model = load_model_from_checkpoint(
-            cfg=cfg, ckpt_file=ckpt_file, eval=True, data_module=data_module,
-        )
-        delete_model = True
+        raise NotImplementedError()
 
     delete_trainer = False
     if trainer is None:
@@ -334,11 +340,16 @@ def predict_dataset(
 
     labeled_preds = trainer.predict(
         model=model,
-        dataloaders=data_module.full_labeled_dataloader(),
+        dataloaders=dataloader,
         return_predictions=True,
     )
 
-    pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=None)
+    pred_handler = PredictionHandler(
+        cfg=cfg,
+        dataset=dataset,
+        video_file=None,
+        add_train_val_test_set=add_train_val_test_set,
+    )
     labeled_preds_df = pred_handler(preds=labeled_preds)
     if isinstance(labeled_preds_df, dict):
         if isinstance(preds_file, str):
@@ -352,7 +363,9 @@ def predict_dataset(
             # Check the order of labeled_preds_df keys matches the order of the views in the cfg.
             assert list(labeled_preds_df.keys()) == list(cfg.data.view_names)
 
-            for (view_name, df), _pred_file in zip(labeled_preds_df.items(), preds_file):
+            for (view_name, df), _pred_file in zip(
+                labeled_preds_df.items(), preds_file
+            ):
                 df.to_csv(_pred_file)
 
     else:
@@ -405,13 +418,18 @@ def predict_single_video(
         DeprecationWarning,
     )
 
-    cfg = _get_cfg_file(cfg_file=cfg_file).copy()  # copy because we update imgaug field below
+    cfg = _get_cfg_file(
+        cfg_file=cfg_file
+    ).copy()  # copy because we update imgaug field below
 
     delete_model = False
     if model is None:
         skip_data_module = True if data_module is None else False
         model = load_model_from_checkpoint(
-            cfg=cfg, ckpt_file=ckpt_file, eval=True, data_module=data_module,
+            cfg=cfg,
+            ckpt_file=ckpt_file,
+            eval=True,
+            data_module=data_module,
             skip_data_module=skip_data_module,
         )
         delete_model = True
@@ -441,7 +459,9 @@ def predict_single_video(
     predict_loader = vid_pred_class()
 
     # initialize prediction handler class
-    pred_handler = PredictionHandler(cfg=cfg, data_module=data_module, video_file=video_file)
+    pred_handler = PredictionHandler(
+        cfg=cfg, data_module=data_module, video_file=video_file
+    )
 
     # ----------------------------------------------------------------------------------
     # compute predictions
@@ -481,60 +501,10 @@ def make_dlc_pandas_index(cfg: DictConfig, keypoint_names: list[str]) -> pd.Mult
 
 
 @typechecked
-def get_model_class(map_type: str, semi_supervised: bool) -> Type[ALLOWED_MODELS]:
-    """[summary]
-
-    Args:
-        map_type (str): "regression" | "heatmap"
-        semi_supervised (bool): True if you want to use unlabeled videos
-
-    Returns:
-        a ptl model class to be initialized outside of this function.
-
-    """
-    if not semi_supervised:
-        if map_type == "regression":
-            from lightning_pose.models import RegressionTracker as Model
-        elif map_type == "heatmap":
-            from lightning_pose.models import HeatmapTracker as Model
-        elif map_type == "heatmap_mhcrnn":
-            from lightning_pose.models import HeatmapTrackerMHCRNN as Model
-        elif map_type == "heatmap_multiview":
-            from lightning_pose.models import HeatmapTrackerMultiview as Model
-        elif map_type == "heatmap_multiview_multihead":
-            from lightning_pose.models import HeatmapTrackerMultiviewMultihead as Model
-        elif map_type == "heatmap_multiview_transformer":
-            from lightning_pose.models import HeatmapTrackerMultiviewTransformer as Model
-        else:
-            raise NotImplementedError(
-                f"{map_type} is an invalid model_type for a fully supervised model"
-            )
-    else:
-        if map_type == "regression":
-            from lightning_pose.models import SemiSupervisedRegressionTracker as Model
-        elif map_type == "heatmap":
-            from lightning_pose.models import SemiSupervisedHeatmapTracker as Model
-        elif map_type == "heatmap_mhcrnn":
-            from lightning_pose.models import SemiSupervisedHeatmapTrackerMHCRNN as Model
-        elif map_type == "heatmap_multiview_transformer":
-            from lightning_pose.models import (
-                SemiSupervisedHeatmapTrackerMultiviewTransformer as Model,
-            )
-        else:
-            raise NotImplementedError(
-                f"{map_type} is an invalid model_type for a semi-supervised model"
-            )
-
-    return Model
-
-
-@typechecked
 def load_model_from_checkpoint(
     cfg: DictConfig,
     ckpt_file: str,
     eval: bool = False,
-    data_module: BaseDataModule | UnlabeledDataModule | None = None,
-    skip_data_module: bool = False,
 ) -> ALLOWED_MODELS:
     """Load Lightning Pose model from checkpoint file.
 
@@ -542,48 +512,18 @@ def load_model_from_checkpoint(
         cfg: model config
         ckpt_file: absolute path to model checkpoint
         eval: True for eval mode, False for train mode
-        data_module: used to initialize unsupervised losses
-        skip_data_module: if `data_module` is not None this is ignored.
-            If False and `data_module=None`, a data module is created from the config file and
-            unsupervised losses are accessible in the model.
-            If True and `data_module=None`, the unsupervised losses are not accessible in the
-            model; this is recommended for running inference on new videos
 
     Returns:
         model as a Lightning Module
 
     """
-    from lightning_pose.utils.io import (
-        check_if_semi_supervised,
-        return_absolute_data_paths,
-    )
-    from lightning_pose.utils.scripts import (
-        get_data_module,
-        get_dataset,
-        get_imgaug_transform,
-        get_loss_factories,
-    )
+    from lightning_pose.utils.io import check_if_semi_supervised
 
-    # get loss factories
-    delete_extras = False
-    if not data_module and not skip_data_module:
-        # create data module if not provided as input
-        delete_extras = True
-        data_dir, video_dir = return_absolute_data_paths(data_cfg=cfg.data)
-        imgaug_transform = get_imgaug_transform(cfg=cfg)
-        dataset = get_dataset(cfg=cfg, data_dir=data_dir, imgaug_transform=imgaug_transform)
-        data_module = get_data_module(cfg=cfg, dataset=dataset, video_dir=video_dir)
-    if not data_module:
-        loss_factories = {"supervised": None, "unsupervised": None}
-    else:
-        loss_factories = get_loss_factories(cfg=cfg, data_module=data_module)
+    container = ModelComponentContainerImpl(cfg)
 
     # pick the right model class
     semi_supervised = check_if_semi_supervised(cfg.model.losses_to_use)
-    ModelClass = get_model_class(
-        map_type=cfg.model.model_type,
-        semi_supervised=semi_supervised,
-    )
+    ModelClass = type(container.get_model())
 
     # initialize a model instance, load weights from .ckpt file (fix state_dict keys if needed)
     try:
@@ -609,12 +549,14 @@ def load_model_from_checkpoint(
         checkpoint["state_dict"] = state_dict
         # create a temporary file with the fixed checkpoint
         import tempfile
-        with tempfile.NamedTemporaryFile(suffix='.ckpt', delete=False) as tmp_file:
+
+        with tempfile.NamedTemporaryFile(suffix=".ckpt", delete=False) as tmp_file:
             torch.save(checkpoint, tmp_file.name)
             fixed_ckpt_file = tmp_file.name
     else:
         fixed_ckpt_file = ckpt_file
 
+    loss_factories = container.get_loss_factories()
     if semi_supervised:
         model = ModelClass.load_from_checkpoint(
             fixed_ckpt_file,
@@ -632,17 +574,13 @@ def load_model_from_checkpoint(
     # clean up temporary file if created
     if keys_remapped:
         import os
+
         os.unlink(fixed_ckpt_file)
 
     if eval:
         model.eval()
 
     # clear up memory
-    if delete_extras:
-        del imgaug_transform
-        del dataset
-        del data_module
-    del loss_factories
     torch.cuda.empty_cache()
 
     return model
@@ -706,7 +644,9 @@ def create_labeled_video(
         clip = clip.resized((upsample_factor * nx, upsample_factor * ny))
         nx, ny = clip.size
 
-    print(f"Duration of video [s]: {np.round(dur, 2)}, recorded at {np.round(fps_og, 2)} fps!")
+    print(
+        f"Duration of video [s]: {np.round(dur, 2)}, recorded at {np.round(fps_og, 2)} fps!"
+    )
 
     def seconds_to_hms(seconds):
         # Convert seconds to a timedelta object
@@ -767,7 +707,10 @@ def create_labeled_video(
         cv2.rectangle(
             frame,
             (text_x - int(offset / 2), text_y + int(offset / 2)),
-            (text_x + text_size[0] + int(offset / 2), text_y - text_size[1] - int(offset / 2)),
+            (
+                text_x + text_size[0] + int(offset / 2),
+                text_y - text_size[1] - int(offset / 2),
+            ),
             (0, 0, 0),  # rectangle color
             cv2.FILLED,
         )
@@ -830,7 +773,7 @@ def export_predictions_and_labeled_video(
             preds_df=preds_df,
             output_mp4_file=labeled_mp4_file,
             confidence_thresh_for_vid=cfg.eval.confidence_thresh_for_vid,
-            colormap=cfg.eval.get("colormap", "cool")
+            colormap=cfg.eval.get("colormap", "cool"),
         )
     return preds_df
 
@@ -894,7 +837,9 @@ def predict_video(
             ), "expected video_file to correspond 1-1 with cfg.data.view_name"
 
     trainer = pl.Trainer(accelerator="gpu", devices=1, logger=False)
-    model_type = "context" if model.config.cfg.model.model_type == "heatmap_mhcrnn" else "base"
+    model_type = (
+        "context" if model.config.cfg.model.model_type == "heatmap_mhcrnn" else "base"
+    )
 
     filenames = [video_file] if not is_multiview else [[f] for f in video_file]
     vid_pred_class = PrepareDALI(

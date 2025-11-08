@@ -217,7 +217,7 @@ def get_data_module(
     cfg: DictConfig,
     dataset: BaseTrackingDataset | HeatmapDataset | MultiviewHeatmapDataset,
     video_dir: str | None = None,
-    dataloader_factory: Callable[[str], DataLoader] | None = None,
+    dataloader_factory: Callable[[str], DataLoader] = None,
 ) -> BaseDataModule | UnlabeledDataModule:
     """Create a data module using provided dataloader factory (preferred).
 
@@ -245,7 +245,6 @@ def get_data_module(
     if not semi_supervised:
         data_module = BaseDataModule(
             dataset=dataset,
-            splits=splits,
             dataloader_factory=dataloader_factory,
         )
     else:
@@ -282,7 +281,6 @@ def get_data_module(
         view_names = list(view_names) if view_names is not None else None
         data_module = UnlabeledDataModule(
             dataset=dataset,
-            splits=splits,
             dataloader_factory=dataloader_factory,
             video_paths_list=video_dir,
             view_names=view_names,
@@ -974,127 +972,12 @@ def compute_metrics_single(
     return result
 
 
-@typechecked
-def get_split_datasets(
-    cfg: DictConfig,
-    dataset: torch.utils.data.Dataset,
-) -> tuple[Subset, Subset, Subset]:
-    """Split a dataset into train/val/test subsets with augmentation-aware handling.
-
-    This mirrors the logic previously implemented in BaseDataModule._setup.
-
-    Args:
-        cfg: Full config; split-related parameters are read from `cfg.training`:
-            - `train_prob`, optional `val_prob`, optional `test_prob`
-            - `train_frames` (int or float)
-            - `rng_seed_data_pt` (int)
-        dataset: The full dataset to split.
-
-    Returns:
-        Tuple of (train_subset, val_subset, test_subset).
-    """
-    datalen = len(dataset)
-    print(f"Number of labeled images in the full dataset (train+val+test): {datalen}")
-
-    # derive split parameters from cfg
-    train_probability = cfg.training.get("train_prob", 0.8)
-    val_probability = cfg.training.get("val_prob", None)
-    test_probability = cfg.training.get("test_prob", None)
-    train_frames = cfg.training.get("train_frames", None)
-    torch_seed = cfg.training.get("rng_seed_data_pt", 42)
-
-    # split data based on provided probabilities
-    data_splits_list = split_sizes_from_probabilities(
-        datalen,
-        train_probability=train_probability,
-        val_probability=val_probability,
-        test_probability=test_probability,
-    )
-
-    if (
-        getattr(dataset, "imgaug_transform", None) is not None
-        and len(dataset.imgaug_transform) == 1
-    ):
-        # no augmentations in the pipeline; subsets can share same underlying dataset
-        train_dataset, val_dataset, test_dataset = random_split(
-            dataset,
-            data_splits_list,
-            generator=torch.Generator().manual_seed(torch_seed),
-        )
-    else:
-        # augmentations in the pipeline; we want validation and test datasets that only resize
-        # we can't simply change the imgaug pipeline in the datasets after they've been split
-        # because the subsets actually point to the same underlying dataset, so we create
-        # separate datasets here
-        train_idxs, val_idxs, test_idxs = random_split(
-            range(len(dataset)),
-            data_splits_list,
-            generator=torch.Generator().manual_seed(torch_seed),
-        )
-
-        train_dataset = Subset(copy.deepcopy(dataset), indices=list(train_idxs))
-        val_dataset = Subset(copy.deepcopy(dataset), indices=list(val_idxs))
-        test_dataset = Subset(copy.deepcopy(dataset), indices=list(test_idxs))
-
-        # only use the final resize transform for the validation and test datasets
-        # try to pull the final transform; if unavailable (e.g., multiview that doesn't resize
-        # by default), enforce resizing to dataset.height/width
-        if (
-            getattr(dataset, "imgaug_transform", None) is not None
-            and len(dataset.imgaug_transform) > 0
-            and dataset.imgaug_transform[-1].__str__().find("Resize") == 0
-        ):
-            final_transform = iaa.Sequential([dataset.imgaug_transform[-1]])
-        else:
-            height = getattr(dataset, "height", None)
-            width = getattr(dataset, "width", None)
-            if height is None or width is None:
-                raise AttributeError(
-                    "Dataset must have 'height' and 'width' attributes when no final Resize transform is present."
-                )
-            final_transform = iaa.Sequential(
-                [iaa.Resize({"height": height, "width": width})]
-            )
-
-        val_dataset.dataset.imgaug_transform = final_transform
-        if hasattr(val_dataset.dataset, "dataset"):
-            # this will get triggered for multiview datasets
-            print("val: updating children datasets with resize imgaug pipeline")
-            for _, dset in val_dataset.dataset.dataset.items():
-                dset.imgaug_transform = final_transform
-
-        test_dataset.dataset.imgaug_transform = final_transform
-        if hasattr(test_dataset.dataset, "dataset"):
-            # this will get triggered for multiview datasets
-            print("test: updating children datasets with resize imgaug pipeline")
-            for _, dset in test_dataset.dataset.dataset.items():
-                dset.imgaug_transform = final_transform
-
-    # further subsample training data if desired
-    if train_frames is not None:
-        n_frames = compute_num_train_frames(len(train_dataset), train_frames)
-        if n_frames < len(train_dataset):
-            # reflect further subsampling from train_frames
-            train_dataset.indices = train_dataset.indices[:n_frames]
-
-    print(
-        f"Dataset splits -- "
-        f"train: {len(train_dataset)}, "
-        f"val: {len(val_dataset)}, "
-        f"test: {len(test_dataset)}"
-    )
-
-    return train_dataset, val_dataset, test_dataset
-
-
 def get_dataloader_factory(
     cfg: DictConfig,
-    dataset: torch.utils.data.Dataset,
-    splits: tuple[Subset, Subset, Subset],
+    dataset_builder: Callable[[str | None, bool], torch.utils.data.Dataset],
 ) -> Callable[[str], DataLoader]:
     """Returns stage -> dataloader for labeled data (train/val/test/full)."""
     train_batch_size, val_batch_size = get_train_val_batches(cfg)
-    train_dataset, val_dataset, test_dataset = splits
 
     def get_dataloader(stage: str) -> DataLoader:
         num_workers = cfg.training.get("num_workers")
@@ -1107,7 +990,7 @@ def get_dataloader_factory(
                 num_workers = os.cpu_count()
         if stage == "train":
             return DataLoader(
-                train_dataset,
+                dataset_builder("train", True),
                 batch_size=train_batch_size,
                 num_workers=num_workers,
                 persistent_workers=True if num_workers > 0 else False,
@@ -1116,21 +999,21 @@ def get_dataloader_factory(
             )
         if stage == "val":
             return DataLoader(
-                val_dataset,
+                dataset_builder("val", False),
                 batch_size=val_batch_size,
                 num_workers=num_workers,
                 persistent_workers=True if num_workers > 0 else False,
             )
         if stage == "test":
             return DataLoader(
-                test_dataset,
+                dataset_builder("test", False),
                 batch_size=cfg.training.test_batch_size,
                 num_workers=num_workers,
                 persistent_workers=True if num_workers > 0 else False,
             )
         if stage == "full":
             return DataLoader(
-                dataset,
+                dataset_builder(None, False),
                 batch_size=val_batch_size,
                 num_workers=num_workers,
                 persistent_workers=True if num_workers > 0 else False,
@@ -1179,3 +1062,63 @@ def get_training_trainer(
         profiler=cfg.training.get("profiler", None),
         sync_batchnorm=True,
     )
+
+
+def get_orig_split_indices(cfg, len_orig_dataset: int):
+    # derive split parameters from cfg
+    train_probability = cfg.training.get("train_prob", 0.8)
+    val_probability = cfg.training.get("val_prob", None)
+    test_probability = cfg.training.get("test_prob", None)
+    train_frames = cfg.training.get("train_frames", None)
+    torch_seed = cfg.training.get("rng_seed_data_pt", 42)
+
+    # split data based on provided probabilities
+    data_splits_list = split_sizes_from_probabilities(
+        len_orig_dataset,
+        train_probability=train_probability,
+        val_probability=val_probability,
+        test_probability=test_probability,
+    )
+    train_idxs, val_idxs, test_idxs = random_split(
+        range(len_orig_dataset),
+        data_splits_list,
+        generator=torch.Generator().manual_seed(torch_seed),
+    )
+    # further subsample training data if desired
+    if train_frames is not None:
+        n_frames = compute_num_train_frames(len(train_idxs), train_frames)
+        if n_frames < len(train_idxs):
+            train_idxs = train_idxs[:n_frames]
+    return train_idxs, val_idxs, test_idxs
+
+
+def get_dataset_builder(
+    cfg, imgaug_transform
+) -> Callable[[str | None, bool], torch.utils.data.Dataset]:
+    def dataset_builder(
+        stage: str | None, apply_imgaug: bool
+    ) -> torch.utils.data.Dataset:
+        dataset = get_dataset(
+            cfg,
+            cfg.data.data_dir,
+            imgaug_transform=imgaug_transform if apply_imgaug else None,
+        )
+        # If stage is specified, split the dataset
+        if stage is not None:
+            train_idxs, val_idxs, test_idxs = get_orig_split_indices(cfg, len(dataset))
+            ## TODO: ASK MATT ABOUT THIS SUSPECT COMMENT FROM THE ORIGINAL CODE
+            # try to pull the final transform; if unavailable (e.g., multiview that doesn't resize
+            # by default), enforce resizing to dataset.height/width
+            ## END COMMENT
+
+            indices = (
+                train_idxs
+                if stage == "train"
+                else (val_idxs if stage == "val" else test_idxs)
+            )
+
+            dataset = Subset(dataset, indices=indices)
+
+        return dataset
+
+    return dataset_builder
