@@ -39,6 +39,8 @@ from lightning_pose.models.base import (
     _apply_defaults_for_optimizer_params,
 )
 from lightning_pose.utils import io as io_utils
+from lightning_pose.utils.paths.path_util import PathUtil
+from lightning_pose.utils.paths.path_util_legacy import PathUtilLegacy
 from lightning_pose.utils.pca import KeypointPCA
 
 # to ignore imports for sphix-autoapidoc
@@ -146,18 +148,20 @@ def get_dataset(
                 resize = True
             else:
                 resize = False
+            path_util = PathUtilLegacy(view_names=list(cfg.data.view_names))
             dataset = MultiviewHeatmapDataset(
                 root_directory=data_dir,
                 csv_paths=cfg.data.csv_file,
                 view_names=list(cfg.data.view_names),
                 image_resize_height=cfg.data.image_resize_dims.height,
                 image_resize_width=cfg.data.image_resize_dims.width,
+                path_util=path_util,
                 imgaug_transform=imgaug_transform,
                 downsample_factor=cfg.data.get("downsample_factor", 2),
                 do_context=cfg.model.model_type == "heatmap_mhcrnn",  # context only for mhcrnn
                 resize=resize,
                 uniform_heatmaps=cfg.training.get("uniform_heatmaps_for_nan_keypoints", False),
-                camera_params_path=cfg.data.get("camera_params_file", None),
+                provide_triangulated_points=("camera_params_file" in cfg.data),
                 bbox_paths=cfg.data.get("bbox_file", None),
             )
         else:

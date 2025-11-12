@@ -1,12 +1,17 @@
 """Classes to streamline data typechecking."""
+
 from __future__ import annotations
 
+import typing
 from dataclasses import dataclass
-from typing import TypedDict, Union
+from pathlib import Path
+
+from typing import TypedDict, Union, Optional, Dict, Any
 
 import pandas as pd
 import torch
 from nvidia.dali.plugin.pytorch import DALIGenericIterator
+from pydantic import BaseModel, model_validator, model_serializer, PrivateAttr, Field
 from torchtyping import TensorType
 
 # to ignore imports for sphix-autoapidoc
@@ -25,6 +30,41 @@ __all__ = [
     "SemiSupervisedHeatmapBatchDict",
     "SemiSupervisedDataLoaderDict",
 ]
+
+SessionKey = str
+LabelFileKey = str
+ViewName = str
+
+
+class VideoFileKey(typing.NamedTuple):
+    session_key: SessionKey
+    view: ViewName | None = None
+
+
+class FrameKey(typing.NamedTuple):
+    session_key: SessionKey
+    frame_index: int
+    view: ViewName | None = None
+
+
+class ProjectPaths(BaseModel):
+    data_dir: Path
+    model_dir: Path = Field(default_factory=lambda data: data["data_dir"] / "models")
+
+
+class ProjectConfig(BaseModel):
+    """Class to the project config"""
+
+    view_names: list[str] = []
+    keypoint_names: list[str] = []
+    schema_version: int = 0
+
+
+class Project(BaseModel):
+    project_key: str
+
+    paths: ProjectPaths
+    config: ProjectConfig
 
 
 @dataclass
